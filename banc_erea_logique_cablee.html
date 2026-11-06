@@ -1,0 +1,3103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulateur de Logique Câblée – Banc Didactique EREA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, Arial, sans-serif;
+      background: #e9ecef;
+      color: #1f2933;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Scrollbars minimalistes style CAO */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #e9ecef; }
+    ::-webkit-scrollbar-thumb { background: #b6bec7; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #98a2ad; }
+
+    /* Fond du canevas technique papier millimétré subtil */
+    #sv {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      background-color: #f4f3ee;
+      background-image:
+        linear-gradient(to right, rgba(148, 163, 184, 0.14) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.14) 1px, transparent 1px),
+        linear-gradient(to right, rgba(148, 163, 184, 0.28) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.28) 1px, transparent 1px);
+      background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px;
+      touch-action: none;
+    }
+    #sv.spark { animation: sparkFlash 0.14s 6; }
+    @keyframes sparkFlash { 50% { background-color: #fef08a; } }
+
+    /* Douilles bananes normalisées (anneau blanc + centre noir r=4.5) */
+    .term-group { cursor: crosshair; }
+    .term-outer {
+      fill: #ffffff;
+      stroke: #111827;
+      stroke-width: 1.8px;
+      transition: stroke 0.12s ease, stroke-width 0.12s ease, filter 0.12s ease;
+    }
+    .term-inner {
+      fill: #111827;
+      pointer-events: none;
+    }
+    .term-pneu .term-outer { fill: #e0f2fe; stroke: #0284c7; }
+    .term-pneu .term-inner { fill: #0369a1; }
+    .term-group:hover .term-outer {
+      stroke: #2f5d8a;
+      stroke-width: 2.8px;
+    }
+
+    /* Textes techniques sur schéma */
+    .tl {
+      font-family: 'Segoe UI', system-ui, Arial, sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      fill: #111827;
+      pointer-events: none;
+    }
+    .comp-title {
+      font-family: 'Segoe UI', system-ui, Arial, sans-serif;
+      font-size: 13.5px;
+      font-weight: 700;
+      fill: #111827;
+      pointer-events: none;
+    }
+
+    /* Composants sur le plan */
+    .c { cursor: grab; }
+    .c:active { cursor: grabbing; }
+    .c.board-locked { cursor: default; }
+    .c:not(.board-locked):hover > .sel-box {
+      opacity: 1;
+    }
+    .sel-box {
+      opacity: 0;
+      fill: none;
+      stroke: #3b82f6;
+      stroke-width: 1.2px;
+      stroke-dasharray: 4 3;
+      pointer-events: none;
+      transition: opacity 0.12s ease;
+    }
+
+    /* Cordons bananes */
+    .wire-group { cursor: pointer; }
+    .wire-shadow {
+      fill: none;
+      stroke: rgba(15, 23, 42, 0.14);
+      stroke-width: 5px;
+      stroke-linecap: round;
+      pointer-events: none;
+    }
+    .wire-outline { fill: none; stroke: #0b0f14; stroke-width: 5.6px; stroke-linecap: round; pointer-events: none; opacity: 0.85; }
+    .wire-gloss { fill: none; stroke: #ffffff; stroke-opacity: 0.3; stroke-width: 1.1px; stroke-linecap: round; pointer-events: none; }
+    .wire-path {
+      fill: none;
+      stroke-width: 3.6px;
+      stroke-linecap: round;
+      transition: filter 0.12s, stroke-width 0.12s;
+    }
+    .wire-hit {
+      fill: none;
+      stroke: transparent;
+      stroke-width: 14px;
+      stroke-linecap: round;
+      pointer-events: stroke;
+    }
+    .wire-group:hover .wire-path {
+      stroke-width: 5.2px;
+      filter: brightness(1.15);
+    }
+
+    /* Flux électrique / pneumatique */
+    .flux-elec {
+      filter: drop-shadow(0 0 5px #ef4444);
+      stroke-dasharray: 9 6;
+      animation: flowAnim 0.42s linear infinite;
+    }
+    .flux-pneu {
+      filter: drop-shadow(0 0 5px #06b6d4);
+      stroke-dasharray: 10 6;
+      animation: flowAnim 0.38s linear infinite;
+    }
+    @keyframes flowAnim { to { stroke-dashoffset: -30; } }
+
+    /* Cartes de la palette gauche */
+    .pal-card {
+      background: #ffffff;
+      border: 1px solid #c5ccd3;
+      border-radius: 3px;
+      padding: 6px;
+      cursor: grab;
+      transition: all 0.14s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .pal-card:hover {
+      border-color: #2f5d8a;
+      background: #f3f6f9;
+    }
+    .pal-card:active { cursor: grabbing; }
+
+    /* Pastilles de couleur de cordon dans le header 48px */
+    .swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 9999px;
+      border: 1.5px solid rgba(0, 0, 0, 0.35);
+      cursor: pointer;
+      transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+    }
+    .swatch:hover { transform: scale(1.12); }
+    .swatch.active {
+      transform: scale(1.18);
+      border-color: #ffffff;
+      box-shadow: 0 0 0 2px #2f5d8a;
+    }
+
+    /* Fantôme de Drag & Drop */
+    #gh {
+      display: none;
+      position: fixed;
+      pointer-events: none;
+      z-index: 9999;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.38));
+    }
+
+    /* Schéma technique développé (Folio IEC) */
+    #folio-svg {
+      background-color: #ffffff;
+      background-image:
+        linear-gradient(to right, rgba(203, 213, 225, 0.35) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(203, 213, 225, 0.35) 1px, transparent 1px);
+      background-size: 16px 16px;
+    }
+
+    /* Panneaux latéraux réductibles & Splitter de redimensionnement */
+    .side-panel {
+      transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .side-panel.no-transition {
+      transition: none !important;
+    }
+    .collapsed-bar {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+    }
+    .splitter-handle {
+      width: 5px;
+      cursor: col-resize;
+      background: #c5ccd3;
+      transition: background 0.15s ease;
+      position: relative;
+      z-index: 25;
+      flex-shrink: 0;
+    }
+    .splitter-handle:hover, .splitter-handle.active {
+      background: #2f5d8a;
+    }
+    .folio-interactive {
+      cursor: pointer;
+    }
+    .folio-interactive:hover text {
+      fill: #2f5d8a !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- BARRE SUPÉRIEURE UNIQUE (48px) ULTRA-COMPACTE STYLE CAO -->
+  <header class="h-12 bg-[#e9ecef] border-b border-slate-300 px-2.5 flex items-center justify-between gap-2 z-30 shrink-0">
+    <!-- Gauche : Toggle Palette + Identité + Modèles pré-montés + Sélecteur de Rendu Technique -->
+    <div class="flex items-center gap-1.5 min-w-0">
+      <button id="hdr-toggle-left" class="h-7 px-2 rounded bg-white hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-bold flex items-center gap-1" title="Réduire / Ouvrir la bibliothèque de composants à gauche">
+        <span id="hdr-left-ico">◀</span>
+        <span class="hidden sm:inline text-[10.5px]"> Composants</span>
+      </button>
+
+      <div class="flex items-center gap-1.5 px-1.5 border-r border-slate-300">
+        
+        <span class="font-bold text-xs text-slate-900 whitespace-nowrap hidden md:inline">Banc de câblage EREA</span>
+      </div>
+
+      <!-- Menu déroulant des pré-configurations (Par défaut sur Plan vierge) -->
+      <div class="flex items-center gap-1.5 bg-white border border-slate-300 rounded px-2 py-1">
+        <span class="text-[11px] text-slate-600 font-medium whitespace-nowrap hidden lg:inline">Montage :</span>
+        <select id="pre" class="bg-transparent text-[11px] font-semibold text-[#2f5d8a] focus:outline-none cursor-pointer max-w-[190px] sm:max-w-none">
+          <option value="empty_canvas" class="bg-white text-slate-900" selected>Plan vierge</option>
+          <option value="erea_blank" class="bg-white text-slate-900">Panneau EREA vierge (non câblé)</option>
+          <option value="erea_wired" class="bg-white text-slate-900">Panneau EREA câblé (inversion KD/KG)</option>
+          <option value="elec_hold" class="bg-white text-slate-900">Électrique : Auto-maintien KA1 + H1</option>
+          <option value="pneu_cycle" class="bg-white text-slate-900">Pneumatique : Cycle va-et-vient A+ A-</option>
+          <option value="epneu_cycle" class="bg-white text-slate-900">Électropneumatique : Cycle A+ B+ A- B-</option>
+        </select>
+      </div>
+
+      <!-- Bascule Graphisme Réaliste EREA vs Symboles Techniques IEC/ISO + Vue Split Folio -->
+      <div class="flex items-center bg-white border border-slate-300 rounded p-0.5 text-[10.5px] font-semibold">
+        <button id="view-real" class="px-2 py-0.5 rounded bg-[#2f5d8a] text-white font-bold transition-all" title="Afficher les composants physiques réalistes du banc EREA">Banc réel</button>
+        <button id="view-iec" class="px-2 py-0.5 rounded text-slate-700 hover:text-slate-900 transition-all" title="Afficher les symboles normalisés IEC 60617 / ISO 1219 sur le plan">Symboles IEC</button>
+        <button id="view-split" class="px-2 py-0.5 rounded text-slate-700 hover:text-slate-900 transition-all flex items-center gap-1" title="Afficher en grand le Schéma Technique Développé (Folio IEC 50/50) à côté du banc">
+          <span>Schéma développé</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Centre : Pastilles de couleur de cordon + Bouton Alimentation -->
+    <div class="flex items-center gap-2.5">
+      <div class="hidden xl:flex items-center gap-1.5 bg-white border border-slate-300 rounded px-2 py-1" title="Couleur du cordon banane">
+        <span class="text-[10px] text-slate-600 font-semibold mr-0.5">Fil</span>
+        <button class="swatch active" data-col="#d92626" data-dash="" style="background:#d92626" title="Rouge (24V)"></button>
+        <button class="swatch" data-col="#111827" data-dash="" style="background:#111827" title="Noir (0V / Masse)"></button>
+        <button class="swatch" data-col="#2563eb" data-dash="" style="background:#2563eb" title="Bleu"></button>
+        <button class="swatch" data-col="#6d28d9" data-dash="" style="background:#6d28d9" title="Violet"></button>
+        <button class="swatch" data-col="#7f1d1d" data-dash="" style="background:#7f1d1d" title="Bordeaux"></button>
+        <button class="swatch" data-col="#eab308" data-dash="" style="background:#eab308" title="Jaune"></button>
+        <button class="swatch" data-col="#0ea5e9" data-dash="" style="background:#0ea5e9" title="Bleu clair / Air"></button>
+        <button class="swatch" data-col="#16a34a" data-dash="" style="background:#16a34a" title="Vert"></button>
+        <button class="swatch" data-col="#92400e" data-dash="5,5" style="background:repeating-linear-gradient(45deg,#92400e,#92400e 3px,#fde68a 3px,#fde68a 6px)" title="Marron pointillé"></button>
+      </div>
+
+      <!-- Bouton Alimentation Générale avec LED -->
+      <button id="pw" class="h-7 px-3 rounded font-bold text-[11px] flex items-center gap-2 transition-all bg-slate-200 hover:bg-slate-300 text-slate-800 border border-slate-400 shrink-0">
+        <span id="pw-led" class="w-2 h-2 rounded-full bg-slate-500"></span>
+        <span id="pw-txt">Alimentation OFF</span>
+      </button>
+    </div>
+
+    <!-- Droite : Outils rapides compacts + Toggle Panneau Droit -->
+    <div class="flex items-center gap-1.5">
+      <label class="h-7 px-2 rounded text-[11px] font-medium bg-white border border-slate-300 text-slate-700 flex items-center gap-1.5 cursor-pointer hover:bg-slate-200" title="Animer le passage du courant et de l'air">
+        <input id="flux" type="checkbox" checked class="accent-[#2f5d8a] rounded">
+        <span class="hidden sm:inline">Flux</span>
+      </label>
+
+      <button id="lock-board-btn" class="h-7 px-2 rounded text-[11px] font-medium bg-white hover:bg-slate-200 border border-slate-300 text-slate-700 flex items-center gap-1" title="Verrouiller/Déverrouiller le déplacement de la plaque de fond beige">
+        <span id="lock-board-ico">●</span>
+        <span class="hidden 2xl:inline">Plaque fixe</span>
+      </button>
+
+      <button id="clr-wires" class="h-7 px-2 rounded text-[11px] font-medium bg-white hover:bg-slate-200 border border-slate-300 text-slate-700" title="Supprimer uniquement tous les cordons">
+        Décâbler
+      </button>
+
+      <button id="clr-all" class="h-7 px-2 rounded text-[11px] font-medium bg-white hover:bg-rose-100 border border-slate-300 hover:border-rose-600 text-slate-700" title="Vider entièrement le plan de travail">
+        Vider
+      </button>
+
+      <button id="exp" class="hidden lg:inline-flex h-7 px-2 rounded text-[11px] font-medium bg-white hover:bg-slate-200 border border-slate-300 text-slate-700 items-center" title="Exporter le montage en JSON">
+        Export
+      </button>
+      <label class="hidden lg:inline-flex h-7 px-2 rounded text-[11px] font-medium bg-white hover:bg-slate-200 border border-slate-300 text-slate-700 items-center cursor-pointer" title="Importer un montage JSON">
+        Import
+        <input id="imp" type="file" accept=".json" hidden>
+      </label>
+
+      <div class="h-4 w-px bg-slate-200 mx-0.5"></div>
+
+      <button id="hdr-toggle-right" class="h-7 px-2 rounded bg-white hover:bg-slate-200 border border-slate-300 text-slate-800 text-xs font-bold flex items-center gap-1" title="Réduire / Ouvrir le panneau Équations et schéma à droite">
+        <span class="hidden sm:inline text-[10.5px]">Équations </span>
+        <span id="hdr-right-ico">▶</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- BANNIÈRE DE NOTIFICATION FLOTTANTE (SANS ALERT) -->
+  <div id="msg-bar" class="hidden fixed top-14 left-1/2 -translate-x-1/2 bg-rose-600 text-white px-4 py-2 rounded text-xs font-semibold flex items-center gap-3 shadow-xl z-50 border border-rose-400">
+    <span id="msg-txt"></span>
+    <button onclick="hideMsg()" class="text-white/80 hover:text-white font-bold ml-2">✕</button>
+  </div>
+
+  <!-- ESPACE DE TRAVAIL PRINCIPAL -->
+  <main class="flex-1 flex min-h-0 relative overflow-hidden">
+
+    <!-- ONGLET VERTICAL GAUCHE QUAND LA PALETTE EST RÉDUITE (28px) -->
+    <div id="left-collapsed-tab" class="hidden w-7 bg-[#e9ecef] border-r border-slate-300 flex-col items-center py-3 gap-3 z-20 shrink-0 cursor-pointer hover:bg-[#dde1e6] transition-colors" title="Cliquer pour déployer la bibliothèque de composants">
+      <button class="w-5 h-5 rounded bg-[#2f5d8a]/15 text-[#2f5d8a] flex items-center justify-center text-xs font-bold">▶</button>
+      <span class="collapsed-bar text-[10.5px] font-bold text-slate-700">Composants</span>
+    </div>
+
+    <!-- PALETTE VISUELLE À GAUCHE (DRAG & DROP INFINI + BOUTON RÉDUIRE) -->
+    <aside id="pal" class="side-panel w-64 bg-[#e9ecef] border-r border-slate-300 flex flex-col z-20 shrink-0 relative">
+      <!-- Onglets de catégories + bouton réduire -->
+      <div class="p-2 border-b border-slate-300 space-y-1.5">
+        <div class="flex items-center justify-between px-1">
+          <span class="text-[10px] font-bold text-slate-700">Composants</span>
+          <button id="btn-collapse-left" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-300 text-slate-700 hover:text-slate-900 text-[10px] font-bold border border-slate-400" title="Réduire ce panneau">
+            ◀ Réduire
+          </button>
+        </div>
+        <div class="grid grid-cols-4 gap-1 text-[10px] font-semibold">
+          <button class="cat-btn bg-[#2f5d8a] text-white py-1 rounded font-bold" data-cat="all">Tous</button>
+          <button class="cat-btn bg-white text-slate-700 hover:bg-slate-200 py-1 rounded" data-cat="sup">Supports</button>
+          <button class="cat-btn bg-white text-slate-700 hover:bg-slate-200 py-1 rounded" data-cat="elec">Élec</button>
+          <button class="cat-btn bg-white text-slate-700 hover:bg-slate-200 py-1 rounded" data-cat="pneu">Pneu</button>
+        </div>
+      </div>
+
+      <!-- Grille des vraies miniatures vectorielles SVG -->
+      <div id="pl" class="flex-1 overflow-y-auto p-2 grid grid-cols-2 gap-2 content-start"></div>
+
+      <!-- Mémo ergonomique très discret -->
+      <div class="px-2.5 py-2 bg-[#f6f7f8] border-t border-slate-300 text-[10px] text-slate-600 space-y-0.5 leading-tight">
+        <div>• <b>Glisser-déposer</b> : ajout infini sur le plan</div>
+        <div>• <b>Clic / Shift+Clic</b> : actionner / maintenir (verrou)</div>
+        <div>• <b>Double-clic</b> : renommer (KA1, H1, S1, a0...)</div>
+        <div>• <b>Clic droit</b> : supprimer fil ou composant</div>
+      </div>
+    </aside>
+
+    <!-- CANEVAS VECTORIEL CENTRAL -->
+    <div id="canvas-wrap" class="flex-1 relative flex flex-col min-w-0 min-h-0 overflow-hidden">
+
+      <!-- Indication discrète quand le canevas est totalement vide -->
+      <div id="empty-hint" class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center p-6 z-0">
+        <div class="bg-white/90 backdrop-blur-sm border border-slate-300/90 rounded px-6 py-5 shadow-sm max-w-md pointer-events-auto">
+          <div class="text-sm font-bold text-slate-800 mb-1">Plan de travail vierge</div>
+          <p class="text-xs text-slate-600 leading-relaxed mb-3">
+            Glissez-déposez une <b>Plaque de câblage</b>, le <b>Banc EREA Complet</b> ou vos composants depuis la bibliothèque à gauche, ou saisissez directement vos équations à droite.
+          </p>
+          <div class="flex flex-wrap items-center justify-center gap-2">
+            <button onclick="loadPreset('erea_blank')" class="text-[11px] font-bold text-slate-900 bg-[#3b6f9f] hover:bg-[#3b6f9f] px-3 py-1.5 rounded shadow-sm transition-all">
+              + Poser le Banc EREA Vierge
+            </button>
+            <button onclick="loadPreset('erea_wired')" class="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3 py-1.5 rounded transition-all">
+              Charger Schéma KD/KG
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contrôles de Zoom & Centrage en bas à droite du canevas -->
+      <div class="absolute bottom-3 right-3 z-10 flex items-center gap-1 bg-white/95 backdrop-blur border border-slate-300 rounded px-1.5 py-1 shadow-sm text-slate-700 text-xs font-semibold">
+        <button id="z-out" class="px-1.5 py-0.5 hover:bg-slate-100 rounded" title="Dézoomer">−</button>
+        <span id="z-lbl" class="px-1.5 text-[11px] font-mono">100%</span>
+        <button id="z-in" class="px-1.5 py-0.5 hover:bg-slate-100 rounded" title="Zoomer">+</button>
+        <button id="z-center" class="px-2 py-0.5 hover:bg-slate-100 rounded border-l border-slate-200 text-[11px]" title="Centrer et ajuster la vue sur le montage">Centrer</button>
+        <button id="z-fit" class="px-1.5 py-0.5 hover:bg-slate-100 rounded border-l border-slate-200 text-[11px]" title="Réinitialiser l'échelle 1:1">1:1</button>
+      </div>
+
+      <svg id="sv" viewBox="0 0 1150 760" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#111827"/>
+          </marker>
+          <filter id="dropShadow" x="-6%" y="-6%" width="114%" height="114%">
+            <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.14"/>
+          </filter>
+          <filter id="lampGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="7" result="blur"/>
+            <feMerge>
+              <feMergeNode in="blur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+
+        <g id="viewport">
+          <text id="ttl" x="545" y="28" text-anchor="middle" fill="#111827" font-size="17" font-weight="700" font-family="Inter, sans-serif"></text>
+          <!-- Calque des plaques de fond (toujours en arrière-plan) -->
+          <g id="bl"></g>
+          <!-- Calque des composants -->
+          <g id="cl"></g>
+          <!-- Calque des cordons bananes -->
+          <g id="wl"></g>
+        </g>
+      </svg>
+    </div>
+
+    <!-- POIGNÉE DE REDIMENSIONNEMENT (SPLITTER DRAG) DU PANNEAU DROIT -->
+    <div id="right-splitter" class="splitter-handle" title="Glisser pour redimensionner librement le panneau de droite"></div>
+
+    <!-- PANNEAU DROIT RÉDUCTIBLE & REDIMENSIONNABLE : SYNCHRO ÉQUATIONS <-> CÂBLAGE + FOLIO IEC -->
+    <aside id="right-panel" class="side-panel w-96 bg-[#e9ecef] border-l border-slate-300 flex flex-col z-20 shrink-0 overflow-hidden" style="width: 390px;">
+      <!-- En-tête du panneau droit avec bouton Réduire -->
+      <div class="p-2 border-b border-slate-300 flex items-center justify-between bg-[#f6f7f8] shrink-0">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="text-[#2f5d8a] text-xs font-bold">⇄</span>
+          <span class="text-[11px] font-bold text-slate-800 truncate">Équations et schéma</span>
+          <span id="wire-count" class="text-[10px] font-mono bg-white border border-slate-300 px-1.5 py-0.5 rounded text-[#2f5d8a] shrink-0">0 fil</span>
+        </div>
+        <div class="flex items-center gap-1 shrink-0">
+          <button id="btn-5050-right" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-300 text-[#2f5d8a] text-[10px] font-bold border border-slate-400" title="Basculer largeur 50/50">
+            50/50
+          </button>
+          <button id="btn-collapse-right" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-300 text-slate-700 hover:text-slate-900 text-[10px] font-bold border border-slate-400" title="Réduire ce panneau">
+            Réduire ▶
+          </button>
+        </div>
+      </div>
+
+      <!-- ACCORDÉON 1 : ÉDITEUR D'ÉQUATIONS BIDIRECTIONNEL (Équations <-> Câblage) -->
+      <div class="border-b border-slate-300 bg-[#e9ecef] shrink-0">
+        <div id="acc-hdr-eq" class="px-2.5 py-1.5 bg-[#f6f7f8] hover:bg-[#dde1e6] flex items-center justify-between cursor-pointer select-none">
+          <div class="flex items-center gap-1.5">
+            <span id="acc-ico-eq" class="text-[10px] text-slate-600">▼</span>
+            <span class="text-[10.5px] font-bold text-slate-800">1. Équations Booléennes</span>
+            <span id="eq-sync-badge" class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-600 font-mono">Bidirectionnel</span>
+          </div>
+          <label class="text-[10px] text-slate-600 flex items-center gap-1 cursor-pointer" onclick="event.stopPropagation()" title="Générer et câbler automatiquement dès que vous écrivez une équation">
+            <input id="auto-build-eq" type="checkbox" checked class="accent-[#2f5d8a] rounded">
+            <span>Auto</span>
+          </label>
+        </div>
+
+        <div id="acc-body-eq" class="p-2.5 space-y-2">
+          <div class="relative">
+            <textarea id="eq-notes" spellcheck="false" class="w-full h-24 bg-[#f6f7f8] border border-slate-300 rounded p-2 text-[11.5px] font-mono text-emerald-800 focus:outline-none focus:border-[#2f5d8a] resize-y leading-relaxed" placeholder="Écrivez vos équations ici, ex :&#10;KA1 = /AU . /S3 . (S1 + KA1)&#10;H1 = KA1&#10;M1 = KA1 . /KA2"></textarea>
+          </div>
+
+          <!-- Boutons d'action Équations <-> Câblage -->
+          <div class="flex items-center gap-1.5">
+            <button id="btn-apply-eq" class="flex-1 py-1.5 px-2 rounded bg-[#2f5d8a] hover:bg-[#3b6f9f] text-white font-bold text-[11px] flex items-center justify-center gap-1 shadow transition-all">
+              <span>Générer le montage</span>
+            </button>
+            <button id="btn-read-wires" class="py-1.5 px-2 rounded bg-white hover:bg-slate-200 text-slate-700 border border-slate-400 text-[10.5px] font-semibold shrink-0" title="Extraire les équations à partir des fils actuellement câblés">
+              Lire le câblage
+            </button>
+          </div>
+
+          <!-- Aide syntaxe & Exemples rapides à insérer -->
+          <div class="flex flex-wrap items-center justify-between gap-1 text-[9.5px] text-slate-600 pt-0.5">
+            <span><b class="text-slate-800">.</b> ET | <b class="text-slate-800">+</b> OU | <b class="text-slate-800">/S3</b> NF</span>
+            <div class="flex items-center gap-1">
+              <button class="eq-preset px-1.5 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-[#2f5d8a] font-mono" data-eq="KA1 = /AU . /S3 . (S1 + KA1)&#10;H1 = KA1">Maintien</button>
+              <button class="eq-preset px-1.5 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-[#2f5d8a] font-mono" data-eq="KA1 = /S3 . (S1 + KA1) . /KA2&#10;KA2 = /S3 . (S2 + KA2) . /KA1&#10;H1 = KA1&#10;H2 = KA2&#10;M1 = KA1">Inversion</button>
+              <button class="eq-preset px-1.5 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-[#2f5d8a] font-mono" data-eq="KA1 = /S3 . (S1 + KA1)&#10;KA2 = /S3 . (S2 + KA2)&#10;H1 = S1 + KA1&#10;H2 = KA1 + KA2">KD/KG</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCORDÉON 2 : SCHÉMA TECHNIQUE DÉVELOPPÉ NORMALISÉ (FOLIO IEC 60617 EN DIRECT) -->
+      <div id="folio-section" class="flex-1 flex flex-col min-h-0 border-b border-slate-300">
+        <div id="acc-hdr-folio" class="px-2.5 py-1.5 bg-[#f6f7f8] hover:bg-[#f6f7f8] border-b border-slate-300 flex items-center justify-between cursor-pointer select-none shrink-0">
+          <div class="flex items-center gap-1.5">
+            <span id="acc-ico-folio" class="text-[10px] text-slate-600">▼</span>
+            <span class="text-[10.5px] font-bold text-[#2f5d8a]">2. Schéma développé</span>
+          </div>
+          <span class="text-[9.5px] text-slate-600 font-mono">Interactif +24V/0V</span>
+        </div>
+        <div id="acc-body-folio" class="flex-1 relative min-h-[160px] bg-white overflow-auto">
+          <svg id="folio-svg" class="w-full h-full min-h-[200px]" viewBox="0 0 520 340" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+      </div>
+
+      <!-- ACCORDÉON 3 : ÉTAT TEMPS RÉEL COMPACT -->
+      <div class=" flex flex-col min-h-0 bg-[#f6f7f8] shrink-0">
+        <div id="acc-hdr-log" class="px-2.5 py-1.5 bg-[#f6f7f8] hover:bg-[#f6f7f8] flex items-center justify-between cursor-pointer select-none">
+          <div class="flex items-center gap-1.5">
+            <span id="acc-ico-log" class="text-[10px] text-slate-600">▼</span>
+            <span class="text-[10px] font-semibold text-slate-600">3. Diagnostic</span>
+          </div>
+          <span id="power-status-mini" class="text-[9.5px] font-mono text-slate-600">OFF</span>
+        </div>
+        <div id="acc-body-log" class="h-24 p-2 overflow-y-auto font-mono text-[10.5px] grid grid-cols-2 gap-x-2 gap-y-0.5 content-start text-slate-700 border-t border-slate-300">
+          <div id="log" class="col-span-2 grid grid-cols-2 gap-x-2 gap-y-0.5"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ONGLET VERTICAL DROIT QUAND LE PANNEAU D'ÉQUATIONS EST RÉDUIT (28px) -->
+    <div id="right-collapsed-tab" class="hidden w-7 bg-[#e9ecef] border-l border-slate-300 flex-col items-center py-3 gap-3 z-20 shrink-0 cursor-pointer hover:bg-[#dde1e6] transition-colors" title="Cliquer pour déployer le panneau Équations et schéma">
+      <button class="w-5 h-5 rounded bg-[#2f5d8a]/15 text-[#2f5d8a] flex items-center justify-center text-xs font-bold">◀</button>
+      <span class="collapsed-bar text-[10.5px] font-bold text-slate-700">Équations</span>
+    </div>
+  </main>
+
+  <!-- MODAL DE CONFIGURATION D'UN COMPOSANT (DOUBLE-CLIC) -->
+  <div id="rename-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-[#f6f7f8] border border-slate-400 rounded shadow-2xl p-4 w-80 space-y-3">
+      <h4 class="text-xs font-bold text-[#2f5d8a]">Paramètres du composant</h4>
+      <div>
+        <label class="block text-xs text-slate-700 mb-1">Repère (ex: H1, S1, KA1, M1, a0) :</label>
+        <input id="rename-inp" type="text" class="w-full bg-white border border-slate-400 rounded px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-[#2f5d8a]">
+      </div>
+      <div id="rename-sub-wrap" class="hidden">
+        <label class="block text-xs text-slate-700 mb-1">Étiquette latérale (ex: KD, KG) :</label>
+        <input id="rename-sub" type="text" class="w-full bg-white border border-slate-400 rounded px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-[#2f5d8a]">
+      </div>
+      <div id="rename-cyl-wrap" class="hidden">
+        <label class="block text-xs text-slate-700 mb-1">Associé au vérin (ex: A, B, C) :</label>
+        <div class="flex gap-2">
+          <input id="rename-cyl" type="text" placeholder="A" class="w-1/2 bg-white border border-slate-400 rounded px-2.5 py-1.5 text-xs text-slate-900 font-bold">
+          <select id="rename-end" class="w-1/2 bg-white border border-slate-400 rounded px-2 py-1.5 text-xs text-slate-900">
+            <option value="0">Rentré (0%)</option>
+            <option value="1">Sorti (100%)</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button id="rename-cancel" class="px-3 py-1.5 rounded text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700">Annuler</button>
+        <button id="rename-ok" class="px-3 py-1.5 rounded text-xs font-semibold bg-[#2f5d8a] hover:bg-[#3b6f9f] text-white">Appliquer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FANTÔME DE DRAG DEPUIS LA PALETTE -->
+  <div id="gh"></div>
+
+  <script>
+    /*************************************************************************
+     * 1. MOTEUR DE RÉSOLUTION TEMPS RÉEL (ÉLECTRIQUE + PNEUMATIQUE)
+     *************************************************************************/
+    class Engine {
+      constructor() {
+        this.comps = [];
+        this.wires = [];
+        this.power = false;
+        this.tripped = false;
+        this.short = false;
+      }
+
+      load(comps, wires = []) {
+        this.comps = comps;
+        this.wires = wires;
+      }
+
+      step(dt) {
+        const par = new Map();
+        const find = (x) => {
+          if (!par.has(x)) par.set(x, x);
+          let r = x;
+          while (par.get(r) !== r) r = par.get(r);
+          par.set(x, r);
+          return r;
+        };
+        const union = (a, b) => par.set(find(a), find(b));
+
+        const pw = this.power && !this.tripped;
+        const findCyl = (name) => this.comps.find(c => c.type === 'cyl' && c.id.toUpperCase() === (name || '').toUpperCase());
+
+        // 1) Connexions par cordons bananes / tuyaux
+        for (const w of this.wires) {
+          union(w.a, w.b);
+        }
+
+        // 2) Contacts internes des composants
+        for (const c of this.comps) {
+          if (c.isBoard) continue;
+          const T = (t) => `${c.id}.${t}`;
+          const ty = c.type;
+
+          if ((ty === 'psu_erea' || ty === 'psu') && pw) {
+            union('P', T('+1'));
+            union('P', T('+2'));
+            union('N', T('-1'));
+            union('N', T('-2'));
+          }
+          if (ty === 'src' && pw) {
+            c.terms.forEach(t => union('S', T(t)));
+          }
+          if (ty === 'term_block') {
+            union(T('1'), T('2'));
+            union(T('2'), T('3'));
+            union(T('3'), T('4'));
+          }
+          if (ty === 'btn' || ty === 'au') {
+            const closed = c.no ? !!c.pressed : !c.pressed;
+            if (closed) union(T(c.terms[0]), T(c.terms[1]));
+          }
+          if (ty === 'relay_erea' || ty === 'relay') {
+            for (let g = 1; g <= 4; g++) {
+              if (c.terms.includes(g + '1')) {
+                union(T(g + '1'), T(g + (c.on ? '4' : '2')));
+              }
+            }
+          }
+          if (ty === 'sens' || ty === 'v32s') {
+            const cyl = findCyl(c.cyl);
+            if (cyl) {
+              c.pressed = Number(c.end) === 1 ? cyl.pos >= 0.96 : cyl.pos <= 0.04;
+            }
+            if (ty === 'sens') {
+              union(T('C'), T(c.pressed ? 'NO' : 'NF'));
+            } else if (c.pressed) {
+              union(T('pP'), T('pA'));
+            }
+          }
+          if (ty === 'v32m' && c.pressed) union(T('pP'), T('pA'));
+          if (ty === 'v32e' && c.on) union(T('pP'), T('pA'));
+          if (ty === 'v52' || ty === 'v52e') {
+            if (c.s === 1) union(T('p1'), T('p4'));
+            if (c.s === 2) union(T('p1'), T('p2'));
+          }
+        }
+
+        // 3) Détection de court-circuit franc 24V / 0V
+        if (pw && find('P') === find('N')) {
+          this.tripped = true;
+          this.power = false;
+          this.short = true;
+          return;
+        }
+
+        const isHi = (x) => pw && find(x) === find('P');
+        const isLo = (x) => pw && find(x) === find('N');
+        const isAir = (x) => pw && find(x) === find('S');
+
+        // 4) Mise à jour des récepteurs (lampes, bobines KA, moteurs, électrovannes, vérins)
+        for (const c of this.comps) {
+          if (c.isBoard) continue;
+          const T = (t) => `${c.id}.${t}`;
+          const ty = c.type;
+
+          if (c.coils) {
+            c.act = c.coils.map(([a, b]) => (isHi(T(a)) && isLo(T(b))) || (isHi(T(b)) && isLo(T(a))));
+            c.pol = c.coils.map(([a, b]) => (isHi(T(a)) && isLo(T(b))) ? 1 : (isHi(T(b)) && isLo(T(a))) ? -1 : 0);
+          }
+
+          if (ty === 'lamp' || ty === 'relay_erea' || ty === 'relay' || ty === 'v32e') {
+            c.on = !!(c.act && c.act[0]);
+          }
+          if (ty === 'motor') {
+            c.dir = c.pol ? c.pol[0] : 0;
+          }
+          if (ty === 'v52e') {
+            if (c.act[0] && !c.act[1]) c.s = 1;
+            else if (c.act[1] && !c.act[0]) c.s = 2;
+          }
+          if (ty === 'v52') {
+            const a = isAir(T('p14'));
+            const b = isAir(T('p12'));
+            if (a && !b) c.s = 1;
+            else if (b && !a) c.s = 2;
+          }
+          if (ty === 'cyl') {
+            const pPlus = isAir(T('p+'));
+            const pMinus = c.single ? false : isAir(T('p-'));
+            const speed = 0.55 * dt;
+            if (c.single) {
+              c.pos += pPlus ? speed : -speed;
+            } else {
+              if (pPlus && !pMinus) c.pos += speed;
+              else if (pMinus && !pPlus) c.pos -= speed;
+            }
+            c.pos = Math.max(0, Math.min(1, c.pos));
+          }
+        }
+
+        // 5) État des cordons pour le flux
+        for (const w of this.wires) {
+          w.live = isHi(w.a) ? 1 : isAir(w.a) ? 2 : isLo(w.a) ? 3 : 0;
+        }
+      }
+    }
+
+    /*************************************************************************
+     * 2. CATALOGUE DE LA BIBLIOTHÈQUE VISUELLE (AVEC CLONAGE INFINI)
+     *************************************************************************/
+    const eng = new Engine();
+    const $ = (id) => document.getElementById(id);
+    const sv = $('sv'), viewport = $('viewport'), bl = $('bl'), cl = $('cl'), wl = $('wl'), gh = $('gh');
+    const NS = 'http://www.w3.org/2000/svg';
+
+    const E = (id, type, terms, o = {}) => ({ id, type, terms, ...o });
+
+    const CATALOG = [
+      // CATÉGORIE SUPPORTS & ALIMENTATION
+      {
+        key: 'erea_kit',
+        cat: 'sup',
+        name: 'Banc EREA Complet',
+        desc: 'Plaque + Alim + H + S + KA',
+        prefix: 'KIT',
+        isMacroKit: true,
+        create: () => E('KIT', 'panel_beige', [], { isBoard: true, w: 615, h: 615 })
+      },
+      {
+        key: 'panel_beige',
+        cat: 'sup',
+        name: 'Plaque de câblage',
+        desc: 'Support beige + fiches bananes',
+        prefix: 'PL',
+        create: (id) => E(id, 'panel_beige', [], { isBoard: true, w: 615, h: 615 })
+      },
+      {
+        key: 'psu_erea',
+        cat: 'sup',
+        name: 'Alim. EREA 24V DC',
+        desc: 'Bloc vertical +1 +2 / -1 -2',
+        prefix: 'PSU',
+        create: (id) => E(id, 'psu_erea', ['+1', '+2', '-1', '-2'])
+      },
+      {
+        key: 'src',
+        cat: 'sup',
+        name: 'Source Air Comprimé',
+        desc: 'Manomètre + 4 départs air',
+        prefix: 'AIR',
+        create: (id) => E(id, 'src', ['po1', 'po2', 'po3', 'po4'])
+      },
+
+      // CATÉGORIE ÉLECTRIQUE & RELAIS
+      {
+        key: 'relay_erea',
+        cat: 'elec',
+        name: 'Relais KA (4 RT)',
+        desc: 'Boîtier KA + bobine + 4 contacts',
+        prefix: 'KA',
+        create: (id, num) => E(id, 'relay_erea', [
+          'A1', 'A2',
+          '11', '12', '14',
+          '21', '22', '24',
+          '31', '32', '34',
+          '41', '42', '44'
+        ], { coils: [['A1', 'A2']], on: false, sub: num === 1 ? 'KD' : num === 2 ? 'KG' : 'K' + num })
+      },
+      {
+        key: 'lamp_g',
+        cat: 'elec',
+        name: 'Voyant Vert (H)',
+        desc: 'Témoin lumineux X1-X2',
+        prefix: 'H',
+        create: (id) => E(id, 'lamp', ['X1', 'X2'], { coils: [['X1', 'X2']], color: '#2fb344' })
+      },
+      {
+        key: 'lamp_o',
+        cat: 'elec',
+        name: 'Voyant Orange (H)',
+        desc: 'Témoin lumineux X1-X2',
+        prefix: 'H',
+        create: (id) => E(id, 'lamp', ['X1', 'X2'], { coils: [['X1', 'X2']], color: '#f59f00' })
+      },
+      {
+        key: 'lamp_r',
+        cat: 'elec',
+        name: 'Voyant Rouge (H)',
+        desc: 'Témoin lumineux X1-X2',
+        prefix: 'H',
+        create: (id) => E(id, 'lamp', ['X1', 'X2'], { coils: [['X1', 'X2']], color: '#e03131' })
+      },
+      {
+        key: 'btn_no_g',
+        cat: 'elec',
+        name: 'Bouton Vert I (NO)',
+        desc: 'Contact travail 13-14',
+        prefix: 'S',
+        create: (id) => E(id, 'btn', ['13', '14'], { no: true, pressed: false, color: '#2fb344', sym: 'I' })
+      },
+      {
+        key: 'btn_no_b',
+        cat: 'elec',
+        name: 'Bouton Noir (NO)',
+        desc: 'Contact travail 13-14',
+        prefix: 'S',
+        create: (id) => E(id, 'btn', ['13', '14'], { no: true, pressed: false, color: '#1a1d24', sym: '' })
+      },
+      {
+        key: 'btn_nc_r',
+        cat: 'elec',
+        name: 'Bouton Rouge O (NF)',
+        desc: 'Contact repos 11-12',
+        prefix: 'S',
+        create: (id) => E(id, 'btn', ['11', '12'], { no: false, pressed: false, color: '#e03131', sym: 'O' })
+      },
+      {
+        key: 'au',
+        cat: 'elec',
+        name: 'Arrêt d’urgence',
+        desc: 'Coup de poing NF 11-12',
+        prefix: 'AU',
+        create: (id) => E(id, 'au', ['11', '12'], { no: false, pressed: false })
+      },
+      {
+        key: 'motor',
+        cat: 'elec',
+        name: 'Moteur CC (M1)',
+        desc: 'Moteur 24V M+ / M-',
+        prefix: 'M',
+        create: (id) => E(id, 'motor', ['M+', 'M-'], { coils: [['M+', 'M-']], dir: 0, a: 0 })
+      },
+      {
+        key: 'sens',
+        cat: 'elec',
+        name: 'Fin de course élec.',
+        desc: 'Capteur C / NF / NO',
+        prefix: 'a',
+        create: (id, num) => E(id, 'sens', ['C', 'NF', 'NO'], { cyl: 'A', end: num % 2 === 0 ? 1 : 0, pressed: false })
+      },
+      {
+        key: 'term_block',
+        cat: 'elec',
+        name: 'Bornier 4 douilles',
+        desc: 'Répartiteur équipotentiel',
+        prefix: 'X',
+        create: (id) => E(id, 'term_block', ['1', '2', '3', '4'])
+      },
+
+      // CATÉGORIE PNEUMATIQUE & VÉRINS
+      {
+        key: 'cyl_d',
+        cat: 'pneu',
+        name: 'Vérin Double Effet',
+        desc: 'Orifices + et − (A+ / A−)',
+        prefix: 'A',
+        create: (id) => E(id, 'cyl', ['p+', 'p-'], { pos: 0, single: false })
+      },
+      {
+        key: 'v52e',
+        cat: 'pneu',
+        name: 'Électrovanne 5/2',
+        desc: 'Bistable bobines Y1 / Y2',
+        prefix: 'V',
+        create: (id) => E(id, 'v52e', ['p1', 'p2', 'p4', 'Y1a', 'Y1b', 'Y2a', 'Y2b'], { s: 2, coils: [['Y1a', 'Y1b'], ['Y2a', 'Y2b']] })
+      },
+      {
+        key: 'v52',
+        cat: 'pneu',
+        name: 'Distributeur 5/2 Air',
+        desc: 'Pilotage pneumatique 14/12',
+        prefix: 'D',
+        create: (id) => E(id, 'v52', ['p1', 'p2', 'p4', 'p14', 'p12'], { s: 2 })
+      },
+      {
+        key: 'v32e',
+        cat: 'pneu',
+        name: 'Électrovanne 3/2',
+        desc: 'Monostable ressort Ya/Yb',
+        prefix: 'YV',
+        create: (id) => E(id, 'v32e', ['pP', 'pA', 'Ya', 'Yb'], { on: false, coils: [['Ya', 'Yb']] })
+      },
+      {
+        key: 'v32m',
+        cat: 'pneu',
+        name: 'Poussoir 3/2 Pneu.',
+        desc: 'Bouton pneumatique P / A',
+        prefix: 'm',
+        create: (id) => E(id, 'v32m', ['pP', 'pA'], { pressed: false })
+      },
+      {
+        key: 'v32s',
+        cat: 'pneu',
+        name: 'Capteur Galet 3/2',
+        desc: 'Fin de course pneumatique',
+        prefix: 'a',
+        create: (id, num) => E(id, 'v32s', ['pP', 'pA'], { cyl: 'A', end: num % 2 === 0 ? 1 : 0, pressed: false })
+      }
+    ];
+
+    function nextUniqueId(prefix) {
+      const existing = new Set(eng.comps.map(c => c.id));
+      if (prefix === 'A') {
+        for (const L of ['A', 'B', 'C', 'D', 'E', 'F', 'G']) {
+          if (!existing.has(L)) return { id: L, num: 1 };
+        }
+      }
+      if (prefix === 'a') {
+        const list = ['a0', 'a1', 'b0', 'b1', 'c0', 'c1', 'd0', 'd1'];
+        for (let i = 0; i < list.length; i++) {
+          if (!existing.has(list[i])) return { id: list[i], num: i + 1 };
+        }
+      }
+      if ((prefix === 'AU' || prefix === 'PSU' || prefix === 'AIR') && !existing.has(prefix)) {
+        return { id: prefix, num: 1 };
+      }
+      let n = 1;
+      while (existing.has(`${prefix}${n}`)) n++;
+      return { id: `${prefix}${n}`, num: n };
+    }
+
+    /*************************************************************************
+     * 3. GÉOMÉTRIE & COORDONNÉES DES DOUILLES BANANES (FIDÉLITÉ IMAGE EREA)
+     *************************************************************************/
+    function geo(c) {
+      const T = c.type, q = c.terms;
+      if (T === 'panel_beige') {
+        return { w: c.w || 615, h: c.h || 615, t: [] };
+      }
+      if (T === 'psu_erea') {
+        // Bornes directement sur les deux premiers carrés verts du bornier haut et bas
+        return {
+          w: 164, h: 272,
+          t: [
+            ['+1', 35, 23, 'u'],
+            ['+2', 53, 23, 'u'],
+            ['-1', 35, 249, 'd'],
+            ['-2', 53, 249, 'd']
+          ]
+        };
+      }
+      if (T === 'lamp') {
+        return {
+          w: 120, h: 66,
+          t: [
+            [q[0], 16, 36, 'u'],
+            [q[1], 104, 36, 'u']
+          ]
+        };
+      }
+      if (T === 'btn') {
+        return {
+          w: 124, h: 66,
+          t: [
+            [q[0], 16, 36, 'u'],
+            [q[1], 108, 36, 'u']
+          ]
+        };
+      }
+      if (T === 'au') {
+        return {
+          w: 132, h: 166,
+          t: [
+            ['11', 42, 22, 'u'],
+            ['12', 90, 22, 'u']
+          ]
+        };
+      }
+      if (T === 'motor') {
+        return {
+          w: 124, h: 66,
+          t: [
+            ['M+', 16, 38, 'u'],
+            ['M-', 108, 38, 'u']
+          ]
+        };
+      }
+      if (T === 'relay_erea') {
+        const terms = [
+          ['A1', 155, 34, 'u'],
+          ['A2', 155, 112, 'd']
+        ];
+        const cols = [248, 348, 448, 548];
+        cols.forEach((cx, idx) => {
+          const g = idx + 1;
+          terms.push([`${g}1`, cx, 34, 'u']);
+          terms.push([`${g}2`, cx - 22, 112, 'd']);
+          terms.push([`${g}4`, cx + 22, 112, 'd']);
+        });
+        return { w: 590, h: 140, t: terms };
+      }
+      if (T === 'term_block') {
+        return {
+          w: 140, h: 48,
+          t: [
+            ['1', 20, 24, 'u'],
+            ['2', 53, 24, 'u'],
+            ['3', 86, 24, 'u'],
+            ['4', 119, 24, 'u']
+          ]
+        };
+      }
+      if (T === 'src') {
+        return { w: 170, h: 84, t: [30, 64, 98, 132].map((x, i) => ['po' + (i + 1), x, 80, 'd']) };
+      }
+      if (T === 'cyl') {
+        return { w: 230, h: 84, t: c.single ? [['p+', 32, 14, 'u']] : [['p+', 32, 14, 'u'], ['p-', 118, 14, 'u']] };
+      }
+      if (T === 'v52') {
+        return { w: 190, h: 100, t: [['p4', 65, 14, 'u'], ['p2', 125, 14, 'u'], ['p1', 95, 94, 'd'], ['p14', 14, 55, 'u'], ['p12', 176, 55, 'u']] };
+      }
+      if (T === 'v52e') {
+        return { w: 190, h: 100, t: [['p4', 65, 14, 'u'], ['p2', 125, 14, 'u'], ['p1', 95, 94, 'd'], [q[3], 16, 38, 'l'], [q[4], 16, 72, 'l'], [q[5], 174, 38, 'r'], [q[6], 174, 72, 'r']] };
+      }
+      if (T === 'v32e') {
+        return { w: 160, h: 100, t: [['pA', 60, 14, 'u'], ['pP', 60, 94, 'd'], ['Ya', 12, 38, 'l'], ['Yb', 12, 72, 'l']] };
+      }
+      if (T === 'sens') {
+        return { w: 104, h: 84, t: [['C', 18, 74, 'd'], ['NF', 52, 74, 'd'], ['NO', 86, 74, 'd']] };
+      }
+      return { w: 104, h: 84, t: [['pP', 26, 74, 'd'], ['pA', 78, 74, 'd']] };
+    }
+
+    /*************************************************************************
+     * 4. DESSINS VECTORIELS HAUTE PRÉCISION (FIDÉLITÉ À L'IMAGE ORIGINALE)
+     *************************************************************************/
+    const ln = (x1, y1, x2, y2, st = '#111827', w = 1.6) =>
+      `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${st}" stroke-width="${w}" stroke-linecap="round"/>`;
+
+    const box = (x, on) =>
+      `<rect x="${x}" y="30" width="50" height="50" fill="${on ? '#fef08a' : '#ffffff'}" stroke="#111827" stroke-width="2"/>`;
+
+    const arrowPath = (d) =>
+      `<path d="${d}" stroke="#111827" stroke-width="1.8" fill="none" marker-end="url(#ar)"/>`;
+
+    // Mode d'affichage sur le canevas principal : 'real' (Banc EREA) ou 'iec' (Symboles Techniques IEC/ISO)
+    let canvasSymbolMode = 'real';
+
+    // Symboles techniques normalisés IEC 60617 pour l'affichage direct sur le plan en mode "Symboles IEC"
+    const DR_IEC = {
+      cyl: (c) => {
+        const p = 34 + c.pos * 80;
+        return `
+          ${ln(32, 14, 32, 30, '#111827', 1.8)}
+          ${ln(118, 14, 118, 30, '#111827', 1.8)}
+          <rect x="20" y="30" width="110" height="26" fill="#ffffff" stroke="#111827" stroke-width="2"/>
+          <line x1="${p}" y1="30" x2="${p}" y2="56" stroke="#111827" stroke-width="3"/>
+          ${ln(p, 43, p + 104, 43, '#111827', 2.2)}
+          <text class="comp-title" x="75" y="74" text-anchor="middle" font-size="11">${c.id} (double effet)</text>
+        `;
+      },
+      lamp: (c) => {
+        const col = c.color || ({ H1: '#2fb344', H2: '#f59f00', H3: '#e03131' }[c.id] || '#2fb344');
+        const on = !!c.on;
+        return `
+          <rect x="6" y="4" width="108" height="58" rx="4" fill="#ffffff" stroke="#1e293b" stroke-width="1.4" stroke-dasharray="3,2"/>
+          <text class="comp-title" x="60" y="17" text-anchor="middle" font-size="11">${c.id} (IEC)</text>
+          ${ln(16, 36, 42, 36, '#111827', 1.8)}
+          ${ln(78, 36, 104, 36, '#111827', 1.8)}
+          ${on ? `<circle cx="60" cy="36" r="22" fill="${col}" opacity="0.45" filter="url(#lampGlow)"/>` : ''}
+          <circle cx="60" cy="36" r="18" fill="${on ? col : '#ffffff'}" stroke="#111827" stroke-width="2"/>
+          <line x1="47.5" y1="23.5" x2="72.5" y2="48.5" stroke="#111827" stroke-width="1.8"/>
+          <line x1="72.5" y1="23.5" x2="47.5" y2="48.5" stroke="#111827" stroke-width="1.8"/>
+        `;
+      },
+      btn: (c) => {
+        const p = !!c.pressed;
+        const closed = c.no ? p : !p;
+        return `
+          <rect x="6" y="4" width="112" height="58" rx="4" fill="#ffffff" stroke="#1e293b" stroke-width="1.4" stroke-dasharray="3,2"/>
+          <text class="comp-title" x="62" y="16" text-anchor="middle" font-size="11">${c.id} (${c.no ? 'NO' : 'NF'})</text>
+          ${ln(16, 36, 44, 36, '#111827', 2)}
+          ${ln(80, 36, 108, 36, '#111827', 2)}
+          ${!c.no ? `<line x1="44" y1="36" x2="44" y2="28" stroke="#111827" stroke-width="1.8"/>` : ''}
+          <line x1="44" y1="${closed ? 36 : 24}" x2="80" y2="36" stroke="${closed ? '#16a34a' : '#111827'}" stroke-width="2.2"/>
+          <!-- Poussoir mécanique IEC (ligne pointillée + bouton E) -->
+          <line x1="62" y1="18" x2="62" y2="30" stroke="#111827" stroke-width="1.4" stroke-dasharray="2,2"/>
+          <path d="M55,21 V17 H69 V21" fill="none" stroke="#111827" stroke-width="1.6"/>
+        `;
+      },
+      au: (c) => {
+        const p = !!c.pressed;
+        const closed = !p;
+        return `
+          <rect x="10" y="12" width="112" height="142" rx="4" fill="#fffbeb" stroke="#d97706" stroke-width="1.6"/>
+          <text class="comp-title" x="66" y="42" text-anchor="middle">${c.id} (IEC NF)</text>
+          ${ln(42, 22, 42, 85, '#111827', 2)}
+          ${ln(90, 22, 90, 85, '#111827', 2)}
+          <line x1="42" y1="85" x2="50" y2="85" stroke="#111827" stroke-width="2"/>
+          <line x1="90" y1="${closed ? 85 : 102}" x2="48" y2="85" stroke="${closed ? '#16a34a' : '#dc2626'}" stroke-width="2.4"/>
+          <!-- Chapeau coup de poing IEC + accrochage -->
+          <line x1="66" y1="62" x2="66" y2="88" stroke="#111827" stroke-width="1.5" stroke-dasharray="3,2"/>
+          <path d="M54,62 A12,10 0 0,1 78,62 Z" fill="#dc2626" stroke="#111827" stroke-width="1.5"/>
+          <text x="66" y="138" text-anchor="middle" fill="#111827" font-size="10" font-weight="600">Symbole IEC 60617</text>
+        `;
+      },
+      motor: (c) => {
+        const active = c.dir !== 0;
+        return `
+          <rect x="6" y="4" width="112" height="58" rx="4" fill="#ffffff" stroke="#1e293b" stroke-width="1.4" stroke-dasharray="3,2"/>
+          <text class="comp-title" x="62" y="15" text-anchor="middle">${c.id}</text>
+          ${ln(16, 38, 42, 38, '#111827', 2)}
+          ${ln(82, 38, 108, 38, '#111827', 2)}
+          <circle cx="62" cy="38" r="20" fill="${active ? '#fef08a' : '#ffffff'}" stroke="#111827" stroke-width="2"/>
+          <text x="62" y="41" text-anchor="middle" fill="#111827" font-size="13" font-weight="700">M</text>
+          <line x1="54" y1="46" x2="70" y2="46" stroke="#111827" stroke-width="1.5"/>
+          <line x1="54" y1="49" x2="70" y2="49" stroke="#111827" stroke-width="1.2" stroke-dasharray="3,2"/>
+        `;
+      }
+    };
+
+    const DR = {
+      // Plaque de câblage beige (#f3ead8) + Jeu de fiches bananes en bas
+      panel_beige: (c) => {
+        const w = c.w || 615, h = c.h || 615;
+        return `
+          <rect x="0" y="0" width="${w}" height="${h}" rx="4" fill="#f3ead8" stroke="#222222" stroke-width="1.8" filter="url(#dropShadow)"/>
+          <!-- Jeu de fiches bananes en bas au centre -->
+          <g transform="translate(${w / 2 - 150}, ${h + 6})">
+            <path d="M 22,22 C 75,112 225,112 278,22" fill="none" stroke="#111827" stroke-width="3.6" stroke-linecap="round"/>
+            <path d="M 34,26 C 82,108 218,108 266,26" fill="none" stroke="#dc2626" stroke-width="3.6" stroke-linecap="round"/>
+            <!-- Fiche Gauche Noire -->
+            <g transform="translate(22,22) rotate(-28)">
+              <rect x="-2" y="-17" width="4" height="9" fill="#94a3b8" stroke="#334155" stroke-width="0.9"/>
+              <rect x="-4" y="-8" width="8" height="16" rx="1.5" fill="#1e293b" stroke="#000" stroke-width="1"/>
+            </g>
+            <!-- Fiche Gauche Rouge -->
+            <g transform="translate(34,26) rotate(-24)">
+              <rect x="-2" y="-17" width="4" height="9" fill="#94a3b8" stroke="#334155" stroke-width="0.9"/>
+              <rect x="-4" y="-8" width="8" height="16" rx="1.5" fill="#dc2626" stroke="#7f1d1d" stroke-width="1"/>
+            </g>
+            <!-- Fiche Droite Rouge -->
+            <g transform="translate(266,26) rotate(24)">
+              <rect x="-2" y="-17" width="4" height="9" fill="#94a3b8" stroke="#334155" stroke-width="0.9"/>
+              <rect x="-4" y="-8" width="8" height="16" rx="1.5" fill="#dc2626" stroke="#7f1d1d" stroke-width="1"/>
+            </g>
+            <!-- Fiche Droite Noire -->
+            <g transform="translate(278,22) rotate(28)">
+              <rect x="-2" y="-17" width="4" height="9" fill="#94a3b8" stroke="#334155" stroke-width="0.9"/>
+              <rect x="-4" y="-8" width="8" height="16" rx="1.5" fill="#1e293b" stroke="#000" stroke-width="1"/>
+            </g>
+            <text x="150" y="108" text-anchor="middle" fill="#222222" font-size="9.5" font-family="Inter, sans-serif">Jeu de fiches bananes</text>
+          </g>
+        `;
+      },
+
+      // Alimentation EREA 24 V DC haute fidélité
+      psu_erea: () => {
+        const on = eng.power && !eng.tripped;
+        return `
+          <!-- Faisceau de fils internes sortant en bas vers KA1 -->
+          <path d="M 48,268 C 52,296 68,318 78,342" fill="none" stroke="#111827" stroke-width="1.8"/>
+          <path d="M 58,268 C 64,296 76,318 85,342" fill="none" stroke="#2563eb" stroke-width="1.8"/>
+          <path d="M 70,268 C 76,296 86,318 92,342" fill="none" stroke="#b91c1c" stroke-width="1.8"/>
+          <path d="M 82,268 C 88,296 95,318 100,342" fill="none" stroke="#b91c1c" stroke-width="1.8"/>
+          <path d="M 94,268 C 98,296 104,318 108,342" fill="none" stroke="#b91c1c" stroke-width="1.8"/>
+          <path d="M 106,268 C 108,296 112,318 115,342" fill="none" stroke="#b91c1c" stroke-width="1.8"/>
+
+          <!-- Boîtier externe gris bleuté clair -->
+          <rect x="2" y="2" width="160" height="266" rx="4" fill="#e3eaf2" stroke="#222222" stroke-width="1.6" filter="url(#dropShadow)"/>
+
+          <!-- Bornier vert supérieur à 3 plots -->
+          <rect x="26" y="14" width="54" height="18" fill="#68c766" stroke="#222222" stroke-width="1.2"/>
+          <line x1="44" y1="14" x2="44" y2="32" stroke="#222222" stroke-width="1.2"/>
+          <line x1="62" y1="14" x2="62" y2="32" stroke="#222222" stroke-width="1.2"/>
+
+          <!-- Bloc central bleu nuit EREA -->
+          <rect x="14" y="38" width="88" height="196" fill="#22354f" stroke="#111827" stroke-width="1.4"/>
+          <text x="58" y="88" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="600" letter-spacing="0.5">EREA</text>
+          <text x="58" y="108" text-anchor="middle" fill="#cbd5e1" font-size="9.5">24 V DC</text>
+          <circle cx="58" cy="134" r="4" fill="${on ? '#4ade80' : '#475569'}" stroke="#0f172a" stroke-width="1"/>
+
+          <!-- Mention verticale "Alimentation" -->
+          <text x="130" y="142" text-anchor="middle" fill="#222222" font-size="10.5" transform="rotate(-90 130 142)">Alimentation</text>
+
+          <!-- Bornier vert inférieur à 3 plots -->
+          <rect x="26" y="240" width="54" height="18" fill="#68c766" stroke="#222222" stroke-width="1.2"/>
+          <line x1="44" y1="240" x2="44" y2="258" stroke="#222222" stroke-width="1.2"/>
+          <line x1="62" y1="240" x2="62" y2="258" stroke="#222222" stroke-width="1.2"/>
+        `;
+      },
+
+      // Voyant lumineux H1 (vert), H2 (orange), H3 (rouge) avec croix intérieure fine
+      lamp: (c) => {
+        const col = c.color || ({ H1: '#2fb344', H2: '#f59f00', H3: '#e03131' }[c.id] || '#2fb344');
+        const on = !!c.on;
+        return `
+          <text class="comp-title" x="60" y="13" text-anchor="middle">${c.id}</text>
+          ${ln(16, 36, 36, 36, '#111827', 1.5)}
+          ${ln(84, 36, 104, 36, '#111827', 1.5)}
+          ${on ? `<circle cx="60" cy="36" r="29" fill="${col}" opacity="0.55" filter="url(#lampGlow)"/>` : ''}
+          <circle cx="60" cy="36" r="23" fill="${col}" fill-opacity="${on ? '1' : '0.88'}" stroke="#111827" stroke-width="1.6"/>
+          <line x1="50" y1="26" x2="70" y2="46" stroke="#111827" stroke-width="1.4"/>
+          <line x1="70" y1="26" x2="50" y2="46" stroke="#111827" stroke-width="1.4"/>
+          ${on ? `<circle cx="53" cy="29" r="4.5" fill="#ffffff" opacity="0.65"/>` : ''}
+        `;
+      },
+
+      // Boutons poussoirs S1 (vert I), S2 (noir), S3 (rouge O)
+      btn: (c) => {
+        const col = c.color || (c.id === 'S1' ? '#2fb344' : c.id === 'S2' ? '#1a1d24' : c.id === 'S3' ? '#e03131' : '#2563eb');
+        const sym = c.sym !== undefined ? c.sym : (c.id === 'S1' ? 'I' : c.id === 'S3' ? 'O' : '');
+        const p = !!c.pressed;
+        return `
+          <text class="comp-title" x="62" y="13" text-anchor="middle">${c.id}</text>
+          <circle cx="62" cy="${p ? 37.5 : 36}" r="${p ? 21.5 : 23}" fill="${col}" stroke="#111827" stroke-width="1.6"/>
+          ${sym === 'I' ? `<line x1="62" y1="${p ? 28.5 : 27}" x2="62" y2="${p ? 46.5 : 45}" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/>` : ''}
+          ${sym === 'O' ? `<circle cx="62" cy="${p ? 37.5 : 36}" r="7.5" fill="none" stroke="#ffffff" stroke-width="2.3"/>` : ''}
+          ${c.latch ? `<text x="80" y="13" font-size="9" font-weight="700" fill="#b45309">verrou</text>` : ''}
+        `;
+      },
+
+      // Arrêt d'urgence (AU) sur boîtier jaune orangé (#f2b618)
+      au: (c) => {
+        const p = !!c.pressed;
+        return `
+          ${ln(42, 22, 42, 42, '#111827', 1.5)}
+          ${ln(90, 22, 90, 42, '#111827', 1.5)}
+          <rect x="10" y="42" width="112" height="102" rx="4" fill="#f2b618" stroke="#111827" stroke-width="1.6" filter="url(#dropShadow)"/>
+          <circle cx="66" cy="${p ? 94.5 : 93}" r="${p ? 33 : 35.5}" fill="#dc2626" stroke="#111827" stroke-width="1.6"/>
+          <circle cx="66" cy="${p ? 94.5 : 93}" r="${p ? 19 : 20.5}" fill="#dc2626" stroke="#111827" stroke-width="1.1"/>
+          ${p ? `<text x="66" y="97" text-anchor="middle" fill="#fef08a" font-size="8" font-weight="800">STOP</text>` : ''}
+          <text x="66" y="159" text-anchor="middle" fill="#111827" font-size="10.5" font-family="Inter, sans-serif">Arrêt d'urgence</text>
+        `;
+      },
+
+      // Moteur M1 carré gris clair avec cercle intérieur M
+      motor: (c) => {
+        const active = c.dir !== 0;
+        return `
+          <text class="comp-title" x="62" y="13" text-anchor="middle">${c.id}</text>
+          ${ln(16, 38, 39, 38, '#111827', 1.5)}
+          ${ln(85, 38, 108, 38, '#111827', 1.5)}
+          <rect x="39" y="15" width="46" height="46" rx="3" fill="#e5e7eb" stroke="#111827" stroke-width="1.6"/>
+          <circle cx="62" cy="38" r="16" fill="${active ? '#fef9c3' : '#ffffff'}" stroke="#111827" stroke-width="1.5"/>
+          <g transform="rotate(${c.a || 0} 62 38)">
+            <line x1="62" y1="23" x2="62" y2="28" stroke="${active ? '#dc2626' : '#94a3b8'}" stroke-width="2.2"/>
+          </g>
+          <text x="62" y="42.5" text-anchor="middle" fill="#111827" font-size="12.5" font-weight="600">M</text>
+        `;
+      },
+
+      // Module Relais KA1 (KD) / KA2 (KG) ultra-fidèle au schéma EREA
+      relay_erea: (c) => {
+        const on = !!c.on;
+        const sub = c.sub !== undefined ? c.sub : (c.id === 'KA1' ? 'KD' : c.id === 'KA2' ? 'KG' : '');
+        const cols = [248, 348, 448, 548];
+        let contactsSvg = '';
+
+        cols.forEach((cx) => {
+          const targetX = on ? (cx + 15) : (cx - 15);
+          contactsSvg += `
+            <line x1="${cx}" y1="34" x2="${cx}" y2="55" stroke="#111827" stroke-width="1.4"/>
+            <line x1="${cx}" y1="55" x2="${targetX}" y2="94" stroke="${on ? '#d97706' : '#111827'}" stroke-width="1.7" stroke-linecap="round"/>
+            <polyline points="${cx - 22},112 ${cx - 22},93 ${cx - 13},93" fill="none" stroke="#111827" stroke-width="1.4"/>
+            <polyline points="${cx + 22},112 ${cx + 22},93 ${cx + 13},93" fill="none" stroke="#111827" stroke-width="1.4"/>
+          `;
+        });
+
+        return `
+          <!-- Étiquette KD / KG sur fond blanc arrondi à gauche -->
+          <rect x="-2" y="34" width="46" height="72" rx="8" fill="#ffffff" opacity="0.85"/>
+          <text x="21" y="77" text-anchor="middle" fill="#111827" font-size="18.5" font-weight="500">${sub}</text>
+
+          <!-- Petits fils rouges de liaison inter-relais en bas du boîtier -->
+          <line x1="62" y1="134" x2="60" y2="156" stroke="#b91c1c" stroke-width="1.5"/>
+          <line x1="72" y1="134" x2="70" y2="156" stroke="#b91c1c" stroke-width="1.5"/>
+          <line x1="82" y1="134" x2="80" y2="156" stroke="#b91c1c" stroke-width="1.5"/>
+          <line x1="92" y1="134" x2="90" y2="156" stroke="#b91c1c" stroke-width="1.5"/>
+          <line x1="102" y1="134" x2="100" y2="156" stroke="#b91c1c" stroke-width="1.5"/>
+          <line x1="112" y1="134" x2="110" y2="156" stroke="#b91c1c" stroke-width="1.5"/>
+
+          <!-- Boîtier relais bleu clair (#c5dcf5) -->
+          <rect x="52" y="6" width="76" height="128" rx="3" fill="#c5dcf5" stroke="#111827" stroke-width="1.5" filter="url(#dropShadow)"/>
+          <!-- 4 petits carrés bleus en haut -->
+          <rect x="61" y="16" width="11" height="10" fill="#6aa5e8" stroke="#111827" stroke-width="1"/>
+          <rect x="76" y="16" width="11" height="10" fill="#6aa5e8" stroke="#111827" stroke-width="1"/>
+          <rect x="91" y="16" width="11" height="10" fill="#6aa5e8" stroke="#111827" stroke-width="1"/>
+          <rect x="106" y="16" width="11" height="10" fill="#6aa5e8" stroke="#111827" stroke-width="1"/>
+
+          <!-- Fenêtre blanche centrale KA1 / KA2 -->
+          <rect x="64" y="42" width="52" height="58" fill="#ffffff" stroke="#111827" stroke-width="1.3"/>
+          <text x="90" y="76" text-anchor="middle" fill="#111827" font-size="14.5" font-weight="600">${c.id}</text>
+
+          <!-- Symbole bobine A1-A2 -->
+          <line x1="155" y1="34" x2="155" y2="61" stroke="#111827" stroke-width="1.5"/>
+          <line x1="155" y1="85" x2="155" y2="112" stroke="#111827" stroke-width="1.5"/>
+          <rect x="139" y="61" width="32" height="24" fill="${on ? '#fef08a' : '#ffffff'}" stroke="#111827" stroke-width="1.5"/>
+          <text x="190" y="88" text-anchor="middle" fill="#111827" font-size="11.5" font-weight="500">${c.id}</text>
+
+          <!-- Ligne pointillée horizontale d'accouplement mécanique -->
+          <line x1="171" y1="73" x2="555" y2="73" stroke="#222222" stroke-width="1.3" stroke-dasharray="4,4"/>
+
+          <!-- Contacts inverseurs 11/12/14 à 41/42/44 -->
+          ${contactsSvg}
+        `;
+      },
+
+      term_block: (c) => `
+        <rect x="4" y="6" width="132" height="36" rx="5" fill="#e2e8f0" stroke="#111827" stroke-width="1.5"/>
+        <line x1="20" y1="24" x2="119" y2="24" stroke="#111827" stroke-width="2.5"/>
+        <text x="70" y="14" text-anchor="middle" fill="#334155" font-size="8.5" font-weight="700">${c.id}</text>
+      `,
+
+      src: () => {
+        const a = eng.power ? -0.6 : -2.4;
+        return `
+          <rect width="170" height="62" rx="6" fill="#475569" stroke="#111827" stroke-width="1.8" filter="url(#dropShadow)"/>
+          <circle cx="32" cy="31" r="19" fill="#ffffff" stroke="#111827" stroke-width="1.6"/>
+          <line x1="32" y1="31" x2="${32 + 14 * Math.cos(a)}" y2="${31 + 14 * Math.sin(a)}" stroke="#dc2626" stroke-width="2.4" stroke-linecap="round"/>
+          <text x="110" y="29" text-anchor="middle" fill="#ffffff" font-size="11" font-weight="700">AIR COMPRIMÉ</text>
+          <text x="110" y="44" text-anchor="middle" fill="${eng.power ? '#38bdf8' : '#cbd5e1'}" font-size="9.5" font-weight="700">${eng.power ? '6 BAR ON' : 'OFF'}</text>
+          ${[30, 64, 98, 132].map(x => ln(x, 62, x, 80, '#0284c7', 3)).join('')}
+        `;
+      },
+
+      cyl: (c) => {
+        const p = 26 + c.pos * 92;
+        return `
+          ${ln(32, 14, 32, 30, '#0284c7', 3)}
+          ${ln(118, 14, 118, 30, '#0284c7', 3)}
+          <rect x="28" y="22" width="8" height="9" rx="1" fill="#94a3b8" stroke="#111827" stroke-width="1"/>
+          <rect x="114" y="22" width="8" height="9" rx="1" fill="#94a3b8" stroke="#111827" stroke-width="1"/>
+          <rect x="20" y="30" width="110" height="28" fill="#cfd8e3" stroke="#111827" stroke-width="1.6"/>
+          <rect x="20" y="31" width="110" height="7" fill="#ffffff" opacity="0.5"/>
+          <rect x="${p}" y="32" width="8" height="24" fill="#334155" stroke="#111827" stroke-width="1"/>
+          <rect x="14" y="26" width="10" height="36" rx="1.5" fill="#1e293b"/>
+          <rect x="126" y="26" width="10" height="36" rx="1.5" fill="#1e293b"/>
+          <rect x="${p + 8}" y="40" width="98" height="8" fill="#d5dbe3" stroke="#111827" stroke-width="1.4"/>
+          <rect x="${p + 106}" y="37" width="9" height="14" rx="2" fill="#64748b" stroke="#111827" stroke-width="1.2"/>
+          <text x="75" y="76" text-anchor="middle" fill="#111827" font-size="11" font-weight="700">Vérin ${c.id} – double effet (${Math.round(c.pos * 100)}%)</text>
+        `;
+      },
+
+      v52: (c) => {
+        const e = c.type === 'v52e', a = c.s === 1;
+        let s = `
+          <text x="95" y="12" text-anchor="middle" fill="#111827" font-size="11" font-weight="700">${c.id}</text>
+          ${ln(65, 14, 65, 30, '#0284c7', 3)}
+          ${ln(125, 14, 125, 30, '#0284c7', 3)}
+          ${ln(95, 94, 95, 80, '#0284c7', 3)}
+          ${box(45, a)}${box(95, !a)}
+          ${arrowPath('M70,78 L62,34')}${arrowPath('M86,34 L88,78')}
+          ${arrowPath('M120,78 L128,34')}${arrowPath('M106,34 L104,78')}
+        `;
+        if (e) {
+          const k = c.act || [];
+          s += `
+            <rect x="24" y="30" width="21" height="50" fill="${k[0] ? '#fde047' : '#cbd5e1'}" stroke="#111827" stroke-width="1.6"/>
+            <line x1="24" y1="68" x2="45" y2="42" stroke="#111827" stroke-width="1.2"/>
+            <rect x="145" y="30" width="21" height="50" fill="${k[1] ? '#fde047' : '#cbd5e1'}" stroke="#111827" stroke-width="1.6"/>
+            <line x1="145" y1="68" x2="166" y2="42" stroke="#111827" stroke-width="1.2"/>
+            ${ln(16, 38, 24, 38, '#111827', 2)}${ln(16, 72, 24, 72, '#111827', 2)}
+            ${ln(174, 38, 166, 38, '#111827', 2)}${ln(174, 72, 166, 72, '#111827', 2)}
+          `;
+        } else {
+          s += ln(14, 55, 45, 55, '#0284c7', 3) + ln(176, 55, 145, 55, '#0284c7', 3);
+        }
+        return s;
+      },
+
+      v32e: (c) => `
+        <text x="85" y="12" text-anchor="middle" fill="#111827" font-size="11" font-weight="700">${c.id}</text>
+        ${ln(60, 14, 60, 30, '#0284c7', 3)}
+        ${ln(60, 94, 60, 80, '#0284c7', 3)}
+        ${box(35, c.on)}${box(85, !c.on)}
+        ${arrowPath('M60,78 L60,34')}
+        <path d="M110,34 V56 M100,56 H120" stroke="#111827" stroke-width="2"/>
+        <path d="M135,55 l4,-6 6,12 6,-12 4,6" stroke="#111827" stroke-width="1.6" fill="none"/>
+        <rect x="18" y="30" width="17" height="50" fill="${c.on ? '#fde047' : '#cbd5e1'}" stroke="#111827" stroke-width="1.6"/>
+        ${ln(12, 38, 18, 38, '#111827', 2)}${ln(12, 72, 18, 72, '#111827', 2)}
+      `,
+
+      sens: (c) => {
+        const p = c.pressed, t = c.type;
+        let s = `
+          <rect x="10" y="26" width="84" height="28" rx="4" fill="${p ? '#fde047' : '#f59f00'}" stroke="#111827" stroke-width="1.6"/>
+          <text x="52" y="44" text-anchor="middle" fill="#111827" font-size="11" font-weight="700">${c.id}${t !== 'v32m' ? ' (' + (c.cyl || 'A') + ')' : ''}</text>
+        `;
+        if (t !== 'v32m') {
+          s += `<line x1="22" y1="26" x2="${p ? 16 : 8}" y2="${p ? 16 : 8}" stroke="#334155" stroke-width="2.6"/>
+                <circle cx="${p ? 16 : 8}" cy="${p ? 16 : 8}" r="6" fill="#ffffff" stroke="#111827" stroke-width="1.6"/>`;
+        } else {
+          s += `<rect x="40" y="${p ? 14 : 7}" width="24" height="16" rx="3" fill="#e03131" stroke="#111827" stroke-width="1.6"/>`;
+        }
+        const xs = t === 'sens' ? [18, 52, 86] : [26, 78];
+        return s + xs.map(x => ln(x, 74, x, 54, t === 'sens' ? '#111827' : '#0284c7', 2.4)).join('');
+      }
+    };
+    DR.v52e = DR.v52;
+    DR.v32s = DR.v32m = DR.sens;
+
+    /*************************************************************************
+     * 5. GESTION DU PLAN DE TRAVAIL, DES DOUILLES ET DES CORDONS
+     *************************************************************************/
+    let wireCol = '#d92626';
+    let wireDash = '';
+    let dragTerm = null;
+    let heldBtn = null;
+    let movingComp = null;
+    let palDragging = null;
+    let tmpWire = null;
+    let pos = {};
+    let lockBoards = true; // Par défaut la plaque beige en arrière-plan est fixe pour faciliter le câblage
+
+    let zoom = 1, panX = 0, panY = 0, isPanning = false, panStart = { x: 0, y: 0 };
+    let spacePressed = false;
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT') {
+        spacePressed = true;
+      }
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space') spacePressed = false;
+    });
+
+    function updateViewportTransform() {
+      viewport.setAttribute('transform', `translate(${panX}, ${panY}) scale(${zoom})`);
+      $('z-lbl').textContent = `${Math.round(zoom * 100)}%`;
+    }
+
+    function centerAndFitCanvas() {
+      if (!eng.comps.length) {
+        zoom = 1; panX = 0; panY = 0;
+        updateViewportTransform();
+        return;
+      }
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      eng.comps.forEach(c => {
+        const G = c.G || geo(c);
+        minX = Math.min(minX, c.x);
+        minY = Math.min(minY, c.y);
+        maxX = Math.max(maxX, c.x + G.w);
+        maxY = Math.max(maxY, c.y + G.h + (c.type === 'panel_beige' ? 95 : 15));
+      });
+      const bw = Math.max(200, maxX - minX);
+      const bh = Math.max(200, maxY - minY);
+      const pad = 60;
+      const scaleX = (1150 - pad * 2) / bw;
+      const scaleY = (760 - pad * 2) / bh;
+      zoom = Math.min(1.35, Math.max(0.5, Math.min(scaleX, scaleY)));
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      panX = 575 - cx * zoom;
+      panY = 380 - cy * zoom;
+      updateViewportTransform();
+    }
+
+    function updateEmptyHint() {
+      $('empty-hint').classList.toggle('hidden', eng.comps.length > 0);
+    }
+
+    // Conversion ultra-robuste des coordonnées écran (clientX/clientY) vers le repère du groupe #viewport
+    function svgPt(e) {
+      try {
+        const ctm = viewport.getScreenCTM();
+        if (ctm) {
+          const p = sv.createSVGPoint();
+          p.x = e.clientX;
+          p.y = e.clientY;
+          return p.matrixTransform(ctm.inverse());
+        }
+      } catch (err) {
+        // Fallback géométrique ci-dessous si CTM indisponible pendant une transition
+      }
+      const rect = sv.getBoundingClientRect();
+      if (!rect.width || !rect.height) return { x: 0, y: 0 };
+      const vbW = 1150, vbH = 760;
+      const scale = Math.min(rect.width / vbW, rect.height / vbH);
+      const offsetX = (rect.width - vbW * scale) / 2;
+      const offsetY = (rect.height - vbH * scale) / 2;
+      const svgX = (e.clientX - rect.left - offsetX) / scale;
+      const svgY = (e.clientY - rect.top - offsetY) / scale;
+      return {
+        x: (svgX - panX) / zoom,
+        y: (svgY - panY) / zoom
+      };
+    }
+
+    const isPneuTerm = (fullId) => (fullId.split('.')[1] || '').startsWith('p');
+    const termLabel = (t) => ({ po1: '1', po2: '2', po3: '3', po4: '4', pP: 'P', pA: 'A' }[t]) || (t[0] === 'p' ? t.slice(1) : t);
+
+    function showMsg(txt) {
+      $('msg-txt').textContent = txt;
+      $('msg-bar').classList.remove('hidden');
+      clearTimeout(showMsg.timer);
+      showMsg.timer = setTimeout(hideMsg, 4500);
+    }
+    function hideMsg() {
+      $('msg-bar').classList.add('hidden');
+    }
+
+    function isLockedByPower() {
+      if (eng.power) {
+        showMsg("Modification sous tension interdite ! Coupez d'abord l'alimentation.");
+        return true;
+      }
+      return false;
+    }
+
+    // Tracé esthétique des cordons bananes
+    function wireCtl(a, b, i = 0) {
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const dist = Math.hypot(dx, dy);
+      const sag = Math.min(90, Math.max(26, dist * 0.24)) + (i % 3) * 7;
+      return [[a[0] + dx * 0.12, a[1] + sag], [b[0] - dx * 0.12, b[1] + sag]];
+    }
+
+    function wirePathD(a, b, i = 0) {
+      if (!a || !b) return '';
+      const [c1, c2] = wireCtl(a, b, i);
+      return `M ${a[0]},${a[1]} C ${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${b[0]},${b[1]}`;
+    }
+
+    // Fiche banane 4 mm isolée, orientée dans l'axe du cordon
+    function plugSvg(p, ctl, color) {
+      const ang = Math.atan2(ctl[1] - p[1], ctl[0] - p[0]) * 180 / Math.PI;
+      return `<g transform="translate(${p[0]},${p[1]}) rotate(${ang})" pointer-events="none">
+        <rect x="2" y="-4.2" width="15" height="8.4" rx="2.2" fill="${color}" stroke="#0b0f14" stroke-width="1"/>
+        <rect x="2" y="-5.3" width="3.4" height="10.6" rx="1" fill="#c9ced6" stroke="#0b0f14" stroke-width="0.9"/>
+        <rect x="7" y="-3.4" width="8" height="1.5" rx="0.7" fill="#ffffff" opacity="0.3"/>
+        <rect x="16" y="-2.6" width="4" height="5.2" rx="1.5" fill="#0b0f14" opacity="0.85"/>
+      </g>`;
+    }
+
+    function moveComp(c) {
+      c.g.setAttribute('transform', `translate(${c.x},${c.y})`);
+      c.G.t.forEach(([t, tx, ty]) => {
+        pos[`${c.id}.${t}`] = [c.x + tx, c.y + ty];
+      });
+    }
+
+    function placeComp(c, x, y) {
+      c.x = x;
+      c.y = y;
+      const G = c.G = geo(c);
+      const g = document.createElementNS(NS, 'g');
+      const isBoard = !!c.isBoard;
+      g.setAttribute('class', `c ${isBoard && lockBoards ? 'board-locked' : ''}`);
+      g.dataset.id = c.id;
+
+      // Douilles bananes normalisées (anneau blanc r=8 + centre noir r=4.5)
+      const termsHtml = G.t.map(([t, tx, ty, dir]) => {
+        const isPn = t[0] === 'p';
+        const cls = isPn ? 'term-pneu' : '';
+        const lx = tx + (dir === 'l' ? -14 : dir === 'r' ? 14 : 0);
+        const ly = ty + (dir === 'u' ? -13 : dir === 'd' ? 21 : 4);
+        const anchor = dir === 'l' ? 'end' : dir === 'r' ? 'start' : 'middle';
+
+        return `
+          <g class="term-group ${cls}" data-id="${c.id}.${t}">
+            <circle class="term-outer" cx="${tx}" cy="${ty}" r="8"/>
+            <circle class="term-inner" cx="${tx}" cy="${ty}" r="4.5"/>
+            <text class="tl" x="${lx}" y="${ly}" text-anchor="${anchor}">${termLabel(t)}</text>
+          </g>
+        `;
+      }).join('');
+
+      g.innerHTML = `
+        <rect class="comp-body-hit" width="${G.w}" height="${G.h}" fill="transparent"/>
+        <rect class="sel-box" x="-3" y="-3" width="${G.w + 6}" height="${G.h + 6}" rx="5"/>
+        <g class="gfx"></g>
+        ${termsHtml}
+      `;
+
+      if (isBoard) bl.appendChild(g);
+      else cl.appendChild(g);
+
+      c.g = g;
+      c.f = g.querySelector('.gfx');
+      const drawFn = (canvasSymbolMode === 'iec' && DR_IEC[c.type]) ? DR_IEC[c.type] : DR[c.type];
+      c.f.innerHTML = drawFn(c);
+      moveComp(c);
+      updateEmptyHint();
+    }
+
+    function removeComp(c) {
+      if (isLockedByPower()) return;
+      eng.wires = eng.wires.filter(w => !w.a.startsWith(c.id + '.') && !w.b.startsWith(c.id + '.'));
+      if (c.g) c.g.remove();
+      eng.comps = eng.comps.filter(item => item !== c);
+      Object.keys(pos).forEach(k => {
+        if (k.startsWith(c.id + '.')) delete pos[k];
+      });
+      drawWires();
+      updateEmptyHint();
+    }
+
+    let suppressWireToEqSync = false;
+
+    function drawWires() {
+      wl.innerHTML = eng.wires.map((w, i) => {
+        const pa = pos[w.a], pb = pos[w.b];
+        if (!pa || !pb) return '';
+        const d = wirePathD(pa, pb, i);
+        const [c1, c2] = wireCtl(pa, pb, i);
+        const dashAttr = w.dash ? `stroke-dasharray="${w.dash}"` : '';
+        return `
+          <g class="wire-group" data-i="${i}">
+            <path class="wire-shadow" d="${d}" transform="translate(2,3)"/>
+            <path class="wire-outline" d="${d}"/>
+            <path class="wire-path" d="${d}" stroke="${w.color}" ${dashAttr}/>
+            <path class="wire-gloss" d="${d}" transform="translate(-0.6,-0.8)"/>
+            <path class="wire-hit" d="${d}"/>
+            ${plugSvg(pa, c1, w.color)}
+            ${plugSvg(pb, c2, w.color)}
+          </g>
+        `;
+      }).join('');
+      $('wire-count').textContent = `${eng.wires.length} fil${eng.wires.length > 1 ? 's' : ''}`;
+
+      // Synchronisation automatique Câblage -> Équations + Schéma Développé IEC
+      if (!suppressWireToEqSync) {
+        syncWiresToEquationsAndFolio();
+      } else {
+        renderFolioDiagram();
+      }
+    }
+
+    /*************************************************************************
+     * 5B. SYNCHRONISATION BIDIRECTIONNELLE ÉQUATIONS <-> CÂBLAGE & FOLIO IEC
+     *************************************************************************/
+
+    // --- A. EXTRACTEUR CÂBLAGE -> ÉQUATIONS BOOLÉENNES ---
+    function extractEquationsFromWires() {
+      if (!eng.wires.length) return [];
+
+      // Construction du graphe des noeuds équipotentiels par les fils uniquement
+      const adj = new Map();
+      const addNode = (u) => { if (!adj.has(u)) adj.set(u, new Set()); };
+      eng.wires.forEach(w => {
+        addNode(w.a); addNode(w.b);
+        adj.get(w.a).add(w.b);
+        adj.get(w.b).add(w.a);
+      });
+
+      // Regroupement des bornes reliées par fil en "Nets" (équipotentielles)
+      const netOf = new Map();
+      let netCount = 0;
+      for (const node of adj.keys()) {
+        if (netOf.has(node)) continue;
+        const netId = `N${++netCount}`;
+        const q = [node];
+        netOf.set(node, netId);
+        while (q.length) {
+          const cur = q.shift();
+          for (const nxt of (adj.get(cur) || [])) {
+            if (!netOf.has(nxt)) {
+              netOf.set(nxt, netId);
+              q.push(nxt);
+            }
+          }
+        }
+      }
+
+      const getNet = (termId) => netOf.get(termId) || `ISO_${termId}`;
+
+      // Identifier les Nets +24V et 0V
+      const plusNets = new Set();
+      const minusNets = new Set();
+      eng.comps.filter(c => c.type === 'psu_erea' || c.type === 'psu').forEach(psu => {
+        plusNets.add(getNet(`${psu.id}.+1`));
+        plusNets.add(getNet(`${psu.id}.+2`));
+        minusNets.add(getNet(`${psu.id}.-1`));
+        minusNets.add(getNet(`${psu.id}.-2`));
+      });
+
+      // Liste des contacts franchissables entre deux Nets
+      const contactEdges = [];
+      const addContactEdge = (t1, t2, label) => {
+        const n1 = getNet(t1), n2 = getNet(t2);
+        if (n1.startsWith('ISO_') || n2.startsWith('ISO_') || n1 === n2) return;
+        contactEdges.push({ u: n1, v: n2, label });
+        contactEdges.push({ u: n2, v: n1, label });
+      };
+
+      for (const c of eng.comps) {
+        if (c.type === 'btn' || c.type === 'au') {
+          const sym = c.no ? c.id : `/${c.id}`;
+          addContactEdge(`${c.id}.${c.terms[0]}`, `${c.id}.${c.terms[1]}`, sym);
+        } else if (c.type === 'relay_erea' || c.type === 'relay') {
+          for (let g = 1; g <= 4; g++) {
+            if (c.terms.includes(`${g}1`)) {
+              addContactEdge(`${c.id}.${g}1`, `${c.id}.${g}4`, c.id);
+              addContactEdge(`${c.id}.${g}1`, `${c.id}.${g}2`, `/${c.id}`);
+            }
+          }
+        } else if (c.type === 'sens') {
+          addContactEdge(`${c.id}.C`, `${c.id}.NO`, c.id);
+          addContactEdge(`${c.id}.C`, `${c.id}.NF`, `/${c.id}`);
+        }
+      }
+
+      // Pour chaque récepteur (KA, H, M, V), trouver tous les chemins simples depuis un Net +24V
+      const equations = [];
+      for (const c of eng.comps) {
+        if (!c.coils) continue;
+        c.coils.forEach(([ta, tb]) => {
+          const netA = getNet(`${c.id}.${ta}`);
+          const netB = getNet(`${c.id}.${tb}`);
+          // Vérifier quel côté est relié au 0V (ou chercher de +24V vers l'entrée bobine)
+          let targetNet = null;
+          if (minusNets.has(netB) && !netA.startsWith('ISO_')) targetNet = netA;
+          else if (minusNets.has(netA) && !netB.startsWith('ISO_')) targetNet = netB;
+          else if (!netA.startsWith('ISO_')) targetNet = netA;
+          if (!targetNet || minusNets.has(targetNet)) return;
+
+          const paths = [];
+          const dfs = (curNet, visitedNets, visitedComps, terms) => {
+            if (paths.length >= 10 || terms.length > 6) return;
+            if (plusNets.has(curNet)) {
+              paths.push([...terms].reverse());
+              return;
+            }
+            for (const edge of contactEdges) {
+              const baseCompId = edge.label.replace(/^\//, '');
+              if (edge.v === curNet && !visitedNets.has(edge.u) && !visitedComps.has(baseCompId)) {
+                visitedNets.add(edge.u);
+                visitedComps.add(baseCompId);
+                terms.push(edge.label);
+                dfs(edge.u, visitedNets, visitedComps, terms);
+                terms.pop();
+                visitedComps.delete(baseCompId);
+                visitedNets.delete(edge.u);
+              }
+            }
+          };
+
+          const visNets = new Set([targetNet]);
+          const visComps = new Set();
+          dfs(targetNet, visNets, visComps, []);
+
+          if (paths.length > 0) {
+            const uniqueProducts = [];
+            const seen = new Set();
+            paths.forEach(p => {
+              const dedup = [...new Set(p)];
+              // Ignorer un produit contradictoire (ex: KA1 et /KA1 dans la même branche série)
+              const hasContradiction = dedup.some(lit => {
+                const clean = lit.replace(/^\//, '');
+                return dedup.includes(clean) && dedup.includes('/' + clean);
+              });
+              if (hasContradiction) return;
+
+              const str = dedup.length ? dedup.join(' . ') : '1';
+              if (!seen.has(str)) {
+                seen.add(str);
+                uniqueProducts.push(dedup);
+              }
+            });
+
+            if (uniqueProducts.length > 0) {
+              const outName = c.coils.length > 1 ? `${c.id}.${ta.replace(/[ab]$/, '')}` : c.id;
+              const formatted = formatSumOfProducts(uniqueProducts);
+              equations.push({ lhs: outName, rhs: formatted, products: uniqueProducts, comp: c });
+            }
+          }
+        });
+      }
+      return equations;
+    }
+
+    function formatSumOfProducts(products) {
+      if (!products.length) return '0';
+      if (products.length === 1) return products[0].length ? products[0].join(' . ') : '1';
+
+      // Factoriser les facteurs présents dans TOUS les produits
+      let common = [...products[0]];
+      for (let i = 1; i < products.length; i++) {
+        common = common.filter(tok => products[i].includes(tok));
+      }
+      if (common.length > 0) {
+        const rest = products.map(p => p.filter(tok => !common.includes(tok))).filter(r => r.length > 0);
+        const commonStr = common.join(' . ');
+        if (!rest.length) return commonStr;
+        const orPart = rest.map(r => r.length > 1 ? `(${r.join(' . ')})` : r[0]).join(' + ');
+        return `${commonStr} . (${orPart})`;
+      }
+      return products.map(p => p.join(' . ')).join(' + ');
+    }
+
+    function syncWiresToEquationsAndFolio() {
+      const eqs = extractEquationsFromWires();
+      if (eqs.length > 0 && document.activeElement !== $('eq-notes')) {
+        $('eq-notes').value = eqs.map(e => `${e.lhs} = ${e.rhs}`).join('\n');
+      }
+      renderFolioDiagram(eqs);
+    }
+
+    // --- B. PARSEUR D'ÉQUATIONS BOOLÉENNES -> AST ET SOMME DE PRODUITS ---
+    function parseBooleanExprToSOP(exprStr) {
+      // Tokenize: identifiants (avec / ou ! devant pour NF), '+', '.', '*', '(', ')'
+      const clean = exprStr.replace(/̅/g, '').trim();
+      const tokens = [];
+      let i = 0;
+      while (i < clean.length) {
+        const ch = clean[i];
+        if (/\s/.test(ch)) { i++; continue; }
+        if (ch === '+' || ch === '(' || ch === ')') {
+          tokens.push(ch);
+          i++;
+        } else if (ch === '.' || ch === '*' || ch === '·') {
+          tokens.push('.');
+          i++;
+        } else if (ch === '/' || ch === '!') {
+          i++;
+          while (i < clean.length && /\s/.test(clean[i])) i++;
+          let id = '';
+          while (i < clean.length && /[A-Za-z0-9_]/.test(clean[i])) {
+            id += clean[i++];
+          }
+          if (id) tokens.push('/' + id);
+        } else if (/[A-Za-z0-9_]/.test(ch)) {
+          let id = '';
+          while (i < clean.length && /[A-Za-z0-9_]/.test(clean[i])) {
+            id += clean[i++];
+          }
+          tokens.push(id);
+        } else {
+          i++;
+        }
+      }
+
+      // Insérer '.' implicite entre deux littéraux ou ') ('
+      const norm = [];
+      for (let k = 0; k < tokens.length; k++) {
+        const cur = tokens[k];
+        norm.push(cur);
+        const nxt = tokens[k + 1];
+        if (!nxt) continue;
+        const curIsLitOrClose = cur === ')' || (!['+', '.', '('].includes(cur));
+        const nxtIsLitOrOpen = nxt === '(' || (!['+', '.', ')'].includes(nxt));
+        if (curIsLitOrClose && nxtIsLitOrOpen) {
+          norm.push('.');
+        }
+      }
+
+      let posIdx = 0;
+      function parseOr() {
+        let left = parseAnd();
+        while (posIdx < norm.length && norm[posIdx] === '+') {
+          posIdx++;
+          const right = parseAnd();
+          left = [...left, ...right];
+        }
+        return left;
+      }
+
+      function parseAnd() {
+        let left = parsePrimary();
+        while (posIdx < norm.length && norm[posIdx] === '.') {
+          posIdx++;
+          const right = parsePrimary();
+          const combined = [];
+          for (const p1 of left) {
+            for (const p2 of right) {
+              const merged = [...p1];
+              p2.forEach(lit => { if (!merged.includes(lit)) merged.push(lit); });
+              combined.push(merged);
+            }
+          }
+          left = combined;
+        }
+        return left;
+      }
+
+      function parsePrimary() {
+        if (posIdx >= norm.length) return [[]];
+        const tok = norm[posIdx];
+        if (tok === '(') {
+          posIdx++;
+          const inside = parseOr();
+          if (norm[posIdx] === ')') posIdx++;
+          return inside;
+        }
+        if (tok === ')' || tok === '+' || tok === '.') {
+          posIdx++;
+          return [[]];
+        }
+        posIdx++;
+        return [[tok]];
+      }
+
+      const sop = parseOr().filter(prod => prod.length > 0);
+      return sop;
+    }
+
+    function parseEquationsText(text) {
+      const lines = (text || '').split('\n');
+      const parsed = [];
+      for (const raw of lines) {
+        const line = raw.split('//')[0].trim();
+        if (!line || !line.includes('=')) continue;
+        const eqParts = line.split('=');
+        // Nettoyer un éventuel commentaire entre parenthèses à gauche ex: "KA1 (KD) = ..."
+        const lhsRaw = eqParts[0].replace(/\(.*?\)/g, '').trim();
+        const rhsRaw = eqParts.slice(1).join('=').trim();
+        const lhs = lhsRaw.split(/\s+/)[0];
+        if (!lhs || !rhsRaw) continue;
+        const products = parseBooleanExprToSOP(rhsRaw);
+        if (products.length > 0) {
+          parsed.push({ lhs, rhs: rhsRaw, products });
+        }
+      }
+      return parsed;
+    }
+
+    // --- C. GÉNÉRATEUR AUTOMATIQUE ÉQUATIONS -> COMPOSANTS + CÂBLAGE BANANE ---
+    function buildCircuitFromEquations(eqText) {
+      if (isLockedByPower()) return;
+      const parsedEqs = parseEquationsText(eqText);
+      if (!parsedEqs.length) {
+        showMsg("Écrivez au moins une équation valide, par ex : KA1 = /S3 . (S1 + KA1)");
+        return;
+      }
+
+      suppressWireToEqSync = true;
+      try {
+        // 1) S'assurer que la Plaque EREA (PL1) et l'Alimentation 24V (PSU) existent
+        let board = eng.comps.find(c => c.isBoard);
+        if (!board) {
+          board = { ...E('PL1', 'panel_beige', [], { isBoard: true, w: 615, h: 615 }), x: 250, y: 78 };
+          eng.comps.unshift(board);
+          placeComp(board, board.x, board.y);
+        }
+        let psu = eng.comps.find(c => c.type === 'psu_erea' || c.type === 'psu');
+        if (!psu) {
+          psu = { ...E('PSU', 'psu_erea', ['+1', '+2', '-1', '-2']), x: 165, y: 52 };
+          eng.comps.push(psu);
+          placeComp(psu, psu.x, psu.y);
+        }
+
+        // Collecter tous les identifiants de composants mentionnés à gauche (LHS) et à droite (RHS)
+        const allIds = new Set();
+        const ncHint = new Set();
+        parsedEqs.forEach(eq => {
+          allIds.add(eq.lhs.split('.')[0]);
+          eq.products.forEach(prod => {
+            prod.forEach(lit => {
+              const isNeg = lit.startsWith('/');
+              const cleanId = (isNeg ? lit.slice(1) : lit).split('.')[0];
+              if (cleanId && cleanId !== '1' && cleanId !== '0') {
+                allIds.add(cleanId);
+                if (isNeg) ncHint.add(cleanId);
+              }
+            });
+          });
+        });
+
+        const ensureCompOnBoard = (id) => {
+          let c = eng.comps.find(k => k.id.toUpperCase() === id.toUpperCase());
+          if (c) return c;
+
+          const up = id.toUpperCase();
+          if (up.startsWith('H')) {
+            const idx = Math.max(0, parseInt(up.slice(1) || '1', 10) - 1);
+            const colors = ['#2fb344', '#f59f00', '#e03131'];
+            c = { ...E(up, 'lamp', ['X1', 'X2'], { coils: [['X1', 'X2']], color: colors[idx % 3] }), x: 382, y: 125 + (idx % 3) * 90 };
+          } else if (up === 'AU') {
+            c = { ...E('AU', 'au', ['11', '12'], { no: false, pressed: false }), x: 700, y: 92 };
+          } else if (up.startsWith('M')) {
+            c = { ...E(up, 'motor', ['M+', 'M-'], { coils: [['M+', 'M-']], dir: 0, a: 0 }), x: 702, y: 303 };
+          } else if (up.startsWith('KA') || up.startsWith('KM') || up.startsWith('K')) {
+            const relaysCount = eng.comps.filter(k => k.type === 'relay_erea').length;
+            c = {
+              ...E(up, 'relay_erea', ['A1', 'A2', '11', '12', '14', '21', '22', '24', '31', '32', '34', '41', '42', '44'],
+                { coils: [['A1', 'A2']], on: false, sub: relaysCount === 0 ? 'KD' : relaysCount === 1 ? 'KG' : up }),
+              x: 200, y: 385 + relaysCount * 155
+            };
+          } else if (/^[abc][01]$/i.test(id)) {
+            const sensCount = eng.comps.filter(k => k.type === 'sens').length;
+            const cylLetter = id[0].toUpperCase();
+            const endVal = id[1] === '1' ? 1 : 0;
+            c = { ...E(id, 'sens', ['C', 'NF', 'NO'], { cyl: cylLetter, end: endVal, pressed: false }), x: 360 + sensCount * 115, y: 20 };
+          } else {
+            const idx = Math.max(0, parseInt(up.replace(/\D/g, '') || '1', 10) - 1);
+            const isNC = up === 'S3' || up === 'S0' || ncHint.has(id);
+            const col = isNC ? '#e03131' : idx === 1 ? '#1a1d24' : '#2fb344';
+            const sym = isNC ? 'O' : idx === 0 ? 'I' : '';
+            c = {
+              ...E(up, 'btn', isNC ? ['11', '12'] : ['13', '14'], { no: !isNC, pressed: false, color: col, sym }),
+              x: 545, y: 125 + (idx % 3) * 90
+            };
+          }
+          eng.comps.push(c);
+          placeComp(c, c.x, c.y);
+          return c;
+        };
+
+        allIds.forEach(id => ensureCompOnBoard(id));
+
+        // 2) Générer les cordons bananes en isolant proprement les contacts pour éviter les retours parasites
+        const newWires = [];
+        const wireSet = new Set();
+        const addWire = (a, b, color, dash = '') => {
+          if (!a || !b || a === b || !pos[a] || !pos[b]) return;
+          const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+          if (wireSet.has(key)) return;
+          wireSet.add(key);
+          newWires.push({ a, b, color, dash });
+        };
+
+        const relayGroupCounter = new Map();
+        const sharedChainContact = new Map();
+
+        const getContactTerminals = (lit, upstreamSignature) => {
+          const isNeg = lit.startsWith('/');
+          const rawLit = isNeg ? lit.slice(1) : lit;
+          const [idPart, explicitTerm] = rawLit.split('.');
+          const comp = ensureCompOnBoard(idPart);
+
+          if (comp.type === 'btn' || comp.type === 'au') {
+            return { inT: `${comp.id}.${comp.terms[0]}`, outT: `${comp.id}.${comp.terms[1]}` };
+          }
+          if (comp.type === 'sens') {
+            return { inT: `${comp.id}.C`, outT: `${comp.id}.${isNeg ? 'NF' : 'NO'}` };
+          }
+          if (comp.type === 'relay_erea' || comp.type === 'relay') {
+            // Si la borne est précisée explicitement (ex: KA1.14 ou KA1.24)
+            if (explicitTerm && /^[1-4][24]$/.test(explicitTerm)) {
+              const g = explicitTerm[0];
+              return { inT: `${comp.id}.${g}1`, outT: `${comp.id}.${explicitTerm}` };
+            }
+            // Réutiliser le même pôle de relais uniquement si l'amont exact est identique
+            const sigKey = `${comp.id}|${isNeg ? 'NC' : 'NO'}|${upstreamSignature}`;
+            if (sharedChainContact.has(sigKey)) return sharedChainContact.get(sigKey);
+
+            const used = (relayGroupCounter.get(comp.id) || 0) + 1;
+            const g = ((used - 1) % 4) + 1;
+            relayGroupCounter.set(comp.id, used);
+            const res = {
+              inT: `${comp.id}.${g}1`,
+              outT: `${comp.id}.${g}${isNeg ? '2' : '4'}`
+            };
+            sharedChainContact.set(sigKey, res);
+            return res;
+          }
+          return null;
+        };
+
+        const branchColors = ['#7f1d1d', '#6d28d9', '#eab308', '#0ea5e9', '#16a34a'];
+        let lastMinusTerm = `${psu.id}.-1`;
+
+        parsedEqs.forEach((eq, eqIdx) => {
+          const targetComp = ensureCompOnBoard(eq.lhs.split('.')[0]);
+          if (!targetComp || !targetComp.coils) return;
+
+          const [coilInName, coilOutName] = targetComp.coils[0];
+          const coilInTerm = `${targetComp.id}.${coilInName}`;
+          const coilOutTerm = `${targetComp.id}.${coilOutName}`;
+
+          // Relier la sortie bobine/lampe au 0V (Masse noire)
+          addWire(lastMinusTerm, coilOutTerm, '#111827');
+          lastMinusTerm = coilOutTerm;
+
+          const plusStart = `${psu.id}.${eqIdx % 2 === 0 ? '+1' : '+2'}`;
+          const wireCol = branchColors[eqIdx % branchColors.length];
+
+          // Factorisation du préfixe commun à toutes les branches parallèles de cette équation
+          const prods = eq.products;
+          let commonPrefix = [...prods[0]];
+          for (let i = 1; i < prods.length; i++) {
+            let k = 0;
+            while (k < commonPrefix.length && k < prods[i].length && commonPrefix[k] === prods[i][k]) k++;
+            commonPrefix = commonPrefix.slice(0, k);
+          }
+
+          let feedTerm = plusStart;
+          let chainSig = 'PLUS';
+          commonPrefix.forEach((lit, idx) => {
+            const ct = getContactTerminals(lit, chainSig);
+            if (ct) {
+              addWire(feedTerm, ct.inT, idx === 0 ? '#d92626' : '#eab308');
+              feedTerm = ct.outT;
+              chainSig += `>${lit}`;
+            }
+          });
+
+          // Câbler chaque branche parallèle restante vers l'entrée du récepteur
+          prods.forEach((prod, pIdx) => {
+            const rem = prod.slice(commonPrefix.length);
+            let curFeed = feedTerm;
+            let branchSig = `${chainSig}|EQ_${eq.lhs}_B${pIdx}`;
+            if (rem.length === 0) {
+              addWire(curFeed, coilInTerm, wireCol);
+            } else {
+              rem.forEach((lit, rIdx) => {
+                const ct = getContactTerminals(lit, rIdx === 0 && rem.length === 1 ? `${chainSig}|TO_${eq.lhs}` : branchSig);
+                if (!ct) return;
+                addWire(curFeed, ct.inT, rIdx === 0 && commonPrefix.length === 0 ? '#d92626' : wireCol);
+                curFeed = ct.outT;
+                branchSig += `>${lit}`;
+              });
+              addWire(curFeed, coilInTerm, pIdx > 0 ? '#0ea5e9' : wireCol);
+            }
+          });
+        });
+
+        eng.wires = newWires;
+        if (!$('ttl').textContent) $('ttl').textContent = 'Panneau de câblage – schéma';
+        drawWires();
+        renderFolioDiagram(parsedEqs);
+      } finally {
+        suppressWireToEqSync = false;
+      }
+    }
+
+    // --- D. GÉNÉRATEUR DU DESSIN TECHNIQUE DÉVELOPPÉ INTERACTIF (FOLIO IEC 60617) ---
+    function renderFolioDiagram(precomputedEqs = null) {
+      const folio = $('folio-svg');
+      if (!folio) return;
+
+      let eqs = precomputedEqs || extractEquationsFromWires();
+      if (!eqs || eqs.length === 0) {
+        eqs = parseEquationsText($('eq-notes').value);
+      }
+
+      const numBranches = Math.max(1, eqs.reduce((acc, e) => acc + Math.max(1, e.products.length), 0));
+      const colW = 88;
+      const W = Math.max(480, 90 + numBranches * colW);
+      const H = 330;
+      folio.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+      const pw = eng.power && !eng.tripped;
+      const topY = 34;
+      const botY = 292;
+
+      let svg = `
+        <!-- Cartouche technique supérieur IEC -->
+        <rect x="0" y="0" width="${W}" height="18" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+        <text x="10" y="12.5" fill="#334155" font-size="9.5" font-weight="700" font-family="Inter, sans-serif">FOLIO 01 — SCHÉMA DÉVELOPPÉ INTERACTIF (NORME IEC 60617) — Cliquez sur un contact pour l'actionner</text>
+
+        <!-- Rail supérieur +24V DC -->
+        <line x1="28" y1="${topY}" x2="${W - 20}" y2="${topY}" stroke="${pw ? '#ef4444' : '#dc2626'}" stroke-width="2.6"/>
+        <text x="6" y="${topY + 4}" fill="#dc2626" font-size="10.5" font-weight="800" font-family="JetBrains Mono, monospace">+24V</text>
+
+        <!-- Rail inférieur 0V -->
+        <line x1="28" y1="${botY}" x2="${W - 20}" y2="${botY}" stroke="#2563eb" stroke-width="2.6"/>
+        <text x="12" y="${botY + 4}" fill="#2563eb" font-size="10.5" font-weight="800" font-family="JetBrains Mono, monospace">0V</text>
+      `;
+
+      if (!eqs.length) {
+        svg += `
+          <text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#64748b" font-size="12" font-weight="600">
+            Câblez le panneau ou saisissez une équation pour générer le schéma normalisé IEC.
+          </text>
+        `;
+        folio.innerHTML = svg;
+        return;
+      }
+
+      const isLiteralClosed = (lit) => {
+        const isNeg = lit.startsWith('/');
+        const id = (isNeg ? lit.slice(1) : lit).split('.')[0];
+        const c = eng.comps.find(k => k.id.toUpperCase() === id.toUpperCase());
+        if (!c) return isNeg;
+        if (c.type === 'btn' || c.type === 'au') {
+          return c.no ? !!c.pressed : !c.pressed;
+        }
+        if (c.type === 'relay_erea' || c.type === 'relay') {
+          return isNeg ? !c.on : !!c.on;
+        }
+        if (c.type === 'sens') {
+          return isNeg ? !c.pressed : !!c.pressed;
+        }
+        return false;
+      };
+
+      let curX = 78;
+      let folioNum = 1;
+
+      eqs.forEach((eq) => {
+        const prods = eq.products || [[]];
+        const firstX = curX;
+        const coilY = 250;
+        const mergeY = 212;
+
+        const compObj = eng.comps.find(k => k.id.toUpperCase() === eq.lhs.split('.')[0].toUpperCase());
+        const anyBranchLive = pw && prods.some(prod => prod.every(lit => isLiteralClosed(lit)));
+        const coilActive = compObj ? !!(compObj.on || compObj.dir) : anyBranchLive;
+
+        prods.forEach((prod, pIdx) => {
+          const bx = curX;
+          svg += `<text x="${bx}" y="${topY - 6}" text-anchor="middle" fill="#64748b" font-size="9" font-family="JetBrains Mono, monospace">${folioNum++}</text>`;
+
+          const stepH = Math.min(44, (mergeY - topY - 24) / Math.max(1, prod.length));
+          let lastY = topY;
+          let potentialAlive = pw;
+
+          prod.forEach((lit, lIdx) => {
+            const cy = topY + 22 + lIdx * stepH;
+            const isNeg = lit.startsWith('/');
+            const cleanId = (isNeg ? lit.slice(1) : lit).split('.')[0];
+            const closed = isLiteralClosed(lit);
+
+            // Fil amont jusqu'au contact
+            const upColor = potentialAlive ? '#ef4444' : '#0f172a';
+            svg += `<line x1="${bx}" y1="${lastY}" x2="${bx}" y2="${cy - 10}" stroke="${upColor}" stroke-width="${potentialAlive ? 2.2 : 1.6}"/>`;
+
+            const afterAlive = potentialAlive && closed;
+            const stCol = afterAlive ? '#16a34a' : closed ? '#0284c7' : '#0f172a';
+
+            // Groupe cliquable pour actionner directement le bouton depuis le schéma IEC
+            svg += `<g class="folio-interactive" data-comp="${cleanId}">`;
+            svg += `<rect x="${bx - 22}" y="${cy - 14}" width="54" height="28" fill="transparent"/>`;
+
+            if (isNeg) {
+              svg += `<line x1="${bx}" y1="${cy - 10}" x2="${bx + 6}" y2="${cy - 10}" stroke="${stCol}" stroke-width="1.8"/>`;
+              svg += `<line x1="${bx + (closed ? 4 : 11)}" y1="${cy - 12}" x2="${bx}" y2="${cy + 10}" stroke="${stCol}" stroke-width="2.2"/>`;
+            } else {
+              svg += `<line x1="${bx - (closed ? 1.5 : 9)}" y1="${cy - 10}" x2="${bx}" y2="${cy + 10}" stroke="${stCol}" stroke-width="2.2"/>`;
+            }
+
+            if (/^(S\d+|AU)$/i.test(cleanId)) {
+              svg += `<line x1="${bx - 12}" y1="${cy}" x2="${bx - 5}" y2="${cy}" stroke="#475569" stroke-width="1.1" stroke-dasharray="2,1.5"/>`;
+              svg += `<path d="M${bx - 15},${cy - 4} H${bx - 12} V${cy + 4} H${bx - 15}" fill="none" stroke="#334155" stroke-width="1.3"/>`;
+            }
+
+            svg += `<text x="${bx + 10}" y="${cy + 3}" fill="#0f172a" font-size="10" font-weight="700" font-family="Inter, sans-serif">${cleanId}</text>`;
+            svg += `</g>`;
+
+            potentialAlive = afterAlive;
+            lastY = cy + 10;
+          });
+
+          const branchLiveColor = potentialAlive ? '#16a34a' : '#0f172a';
+          svg += `<line x1="${bx}" y1="${lastY}" x2="${bx}" y2="${mergeY}" stroke="${branchLiveColor}" stroke-width="${potentialAlive ? 2.2 : 1.6}"/>`;
+          if (pIdx > 0) {
+            svg += `<line x1="${firstX}" y1="${mergeY}" x2="${bx}" y2="${mergeY}" stroke="${coilActive ? '#16a34a' : '#0f172a'}" stroke-width="1.6"/>`;
+            svg += `<circle cx="${firstX}" cy="${mergeY}" r="2.5" fill="#0f172a"/>`;
+          }
+
+          curX += colW;
+        });
+
+        // Dessin du Récepteur Normalisé IEC (Bobine KA, Voyant H avec croix, Moteur M)
+        svg += `<line x1="${firstX}" y1="${mergeY}" x2="${firstX}" y2="${coilY - 14}" stroke="${coilActive ? '#16a34a' : '#0f172a'}" stroke-width="${coilActive ? 2.2 : 1.7}"/>`;
+        svg += `<line x1="${firstX}" y1="${coilY + 14}" x2="${firstX}" y2="${botY}" stroke="#2563eb" stroke-width="1.7"/>`;
+        svg += `<circle cx="${firstX}" cy="${botY}" r="2.6" fill="#2563eb"/>`;
+
+        const upLhs = eq.lhs.toUpperCase();
+        if (upLhs.startsWith('H')) {
+          const lCol = compObj?.color || '#2fb344';
+          svg += `<circle cx="${firstX}" cy="${coilY}" r="14" fill="${coilActive ? lCol : '#ffffff'}" stroke="#0f172a" stroke-width="1.8"/>`;
+          svg += `<line x1="${firstX - 9.5}" y1="${coilY - 9.5}" x2="${firstX + 9.5}" y2="${coilY + 9.5}" stroke="#0f172a" stroke-width="1.5"/>`;
+          svg += `<line x1="${firstX + 9.5}" y1="${coilY - 9.5}" x2="${firstX - 9.5}" y2="${coilY + 9.5}" stroke="#0f172a" stroke-width="1.5"/>`;
+          svg += `<text x="${firstX - 18}" y="${coilY - 12}" text-anchor="end" fill="#64748b" font-size="8.5">X1</text>`;
+          svg += `<text x="${firstX - 18}" y="${coilY + 19}" text-anchor="end" fill="#64748b" font-size="8.5">X2</text>`;
+        } else if (upLhs.startsWith('M')) {
+          svg += `<circle cx="${firstX}" cy="${coilY}" r="15" fill="${coilActive ? '#fef08a' : '#ffffff'}" stroke="#0f172a" stroke-width="1.8"/>`;
+          svg += `<text x="${firstX}" y="${coilY + 4}" text-anchor="middle" fill="#0f172a" font-size="11" font-weight="800">M</text>`;
+        } else {
+          svg += `<rect x="${firstX - 18}" y="${coilY - 12}" width="36" height="24" fill="${coilActive ? '#fef08a' : '#ffffff'}" stroke="#0f172a" stroke-width="1.8"/>`;
+          svg += `<text x="${firstX - 21}" y="${coilY - 11}" text-anchor="end" fill="#64748b" font-size="8.5">A1</text>`;
+          svg += `<text x="${firstX - 21}" y="${coilY + 18}" text-anchor="end" fill="#64748b" font-size="8.5">A2</text>`;
+        }
+        svg += `<text x="${firstX}" y="${coilY + 4}" text-anchor="middle" fill="#0f172a" font-size="9.5" font-weight="800">${upLhs.startsWith('H') || upLhs.startsWith('M') ? '' : eq.lhs}</text>`;
+        svg += `<text x="${firstX + 20}" y="${coilY + 4}" fill="#0f172a" font-size="10.5" font-weight="800">${eq.lhs}</text>`;
+      });
+
+      folio.innerHTML = svg;
+    }
+
+    // Interaction directe sur les contacts du Schéma Développé Folio IEC
+    $('folio-svg').addEventListener('pointerdown', (e) => {
+      const grp = e.target.closest('.folio-interactive');
+      if (!grp) return;
+      const compId = grp.dataset.comp;
+      const c = eng.comps.find(k => k.id.toUpperCase() === (compId || '').toUpperCase());
+      if (!c) return;
+      if (c.type === 'au') {
+        c.pressed = !c.pressed;
+      } else if (c.type === 'btn' || c.type === 'v32m') {
+        if (e.shiftKey || c.latch) {
+          c.latch = !c.latch;
+          c.pressed = c.latch;
+        } else {
+          c.pressed = true;
+          heldBtn = c;
+        }
+      }
+    });
+
+    /*************************************************************************
+     * 6. RENDU DE LA PALETTE GAUCHE & DRAG INFINI
+     *************************************************************************/
+    let activeCat = 'all';
+
+    function renderPalette() {
+      const items = CATALOG.filter(item => activeCat === 'all' || item.cat === activeCat);
+      $('pl').innerHTML = items.map(item => {
+        const sample = item.create(item.prefix + '1', 1);
+        const G = geo(sample);
+        const svgContent = DR[sample.type](sample);
+        const pad = 14;
+        const vw = G.w + pad * 2;
+        const vh = G.h + pad * 2;
+
+        return `
+          <div class="pal-card" data-key="${item.key}" title="Glisser sur le plan : ${item.name}">
+            <div class="w-full h-14 flex items-center justify-center bg-[#f3ead8] rounded p-1 mb-1 overflow-hidden border border-slate-300">
+              <svg viewBox="${-pad} ${-pad} ${vw} ${vh}" class="w-full h-full">
+                ${svgContent}
+              </svg>
+            </div>
+            <div class="text-[10.5px] font-bold text-slate-900 text-center leading-tight truncate w-full">${item.name}</div>
+            <div class="text-[9px] text-slate-600 text-center truncate w-full">${item.desc}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    document.querySelectorAll('.cat-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.cat-btn').forEach(b => {
+          b.className = 'cat-btn bg-white text-slate-700 hover:bg-slate-200 py-1 rounded';
+        });
+        btn.className = 'cat-btn bg-[#2f5d8a] text-white py-1 rounded font-bold';
+        activeCat = btn.dataset.cat;
+        renderPalette();
+      });
+    });
+
+    $('pl').addEventListener('pointerdown', (e) => {
+      const card = e.target.closest('.pal-card');
+      if (!card) return;
+      e.preventDefault();
+      const item = CATALOG.find(k => k.key === card.dataset.key);
+      if (!item) return;
+
+      const { id, num } = nextUniqueId(item.prefix);
+      const newComp = item.create(id, num);
+      const G = geo(newComp);
+
+      palDragging = { item, comp: newComp, G };
+
+      gh.innerHTML = `
+        <div class="bg-[#2f5d8a] text-white text-[10px] font-bold px-2 py-0.5 rounded-t text-center shadow">
+          ${item.isMacroKit ? '+ Poser Banc EREA Complet' : `+ ${newComp.id} (${item.name})`}
+        </div>
+        <div class="bg-[#f3ead8]/95 border-2 border-[#2f5d8a] rounded-b p-1.5">
+          <svg width="${Math.min(160, G.w * 0.55)}" height="${Math.min(95, G.h * 0.55)}" viewBox="0 0 ${G.w} ${G.h}">
+            ${DR[newComp.type](newComp)}
+          </svg>
+        </div>
+      `;
+      gh.style.display = 'block';
+      gh.style.left = e.clientX + 'px';
+      gh.style.top = e.clientY + 'px';
+    });
+
+    /*************************************************************************
+     * 7. CONSTRUCTION DU BANC EREA & DES MODÈLES PRÉ-CONFIGURÉS
+     *************************************************************************/
+    function buildEreaBenchComponents(offsetX = 0, offsetY = 0) {
+      return [
+        { ...E('PL1', 'panel_beige', [], { isBoard: true, w: 615, h: 615 }), x: 250 + offsetX, y: 78 + offsetY },
+        { ...E('PSU', 'psu_erea', ['+1', '+2', '-1', '-2']), x: 165 + offsetX, y: 52 + offsetY },
+
+        { ...E('H1', 'lamp', ['X1', 'X2'], { coils: [['X1', 'X2']], color: '#2fb344' }), x: 382 + offsetX, y: 125 + offsetY },
+        { ...E('H2', 'lamp', ['X1', 'X2'], { coils: [['X1', 'X2']], color: '#f59f00' }), x: 382 + offsetX, y: 215 + offsetY },
+        { ...E('H3', 'lamp', ['X1', 'X2'], { coils: [['X1', 'X2']], color: '#e03131' }), x: 382 + offsetX, y: 305 + offsetY },
+
+        { ...E('S1', 'btn', ['13', '14'], { no: true, pressed: false, color: '#2fb344', sym: 'I' }), x: 545 + offsetX, y: 125 + offsetY },
+        { ...E('S2', 'btn', ['13', '14'], { no: true, pressed: false, color: '#1a1d24', sym: '' }), x: 545 + offsetX, y: 215 + offsetY },
+        { ...E('S3', 'btn', ['11', '12'], { no: false, pressed: false, color: '#e03131', sym: 'O' }), x: 545 + offsetX, y: 305 + offsetY },
+
+        { ...E('AU', 'au', ['11', '12'], { no: false, pressed: false }), x: 700 + offsetX, y: 92 + offsetY },
+        { ...E('M1', 'motor', ['M+', 'M-'], { coils: [['M+', 'M-']], dir: 0, a: 0 }), x: 702 + offsetX, y: 303 + offsetY },
+
+        {
+          ...E('KA1', 'relay_erea', ['A1', 'A2', '11', '12', '14', '21', '22', '24', '31', '32', '34', '41', '42', '44'],
+            { coils: [['A1', 'A2']], on: false, sub: 'KD' }),
+          x: 200 + offsetX, y: 385 + offsetY
+        },
+        {
+          ...E('KA2', 'relay_erea', ['A1', 'A2', '11', '12', '14', '21', '22', '24', '31', '32', '34', '41', '42', '44'],
+            { coils: [['A1', 'A2']], on: false, sub: 'KG' }),
+          x: 200 + offsetX, y: 540 + offsetY
+        }
+      ];
+    }
+
+    function getEreaImageWires() {
+      return [
+        { a: 'PSU.-1', b: 'H2.X2', color: '#111827', dash: '' },
+        { a: 'PSU.-1', b: 'KA1.A2', color: '#111827', dash: '' },
+        { a: 'KA1.A2', b: 'KA2.A2', color: '#111827', dash: '' },
+
+        { a: 'PSU.+2', b: 'S3.11', color: '#d92626', dash: '' },
+        { a: 'S3.11', b: 'KA1.21', color: '#d92626', dash: '' },
+        { a: 'KA1.21', b: 'KA2.21', color: '#d92626', dash: '' },
+
+        { a: 'S3.12', b: 'KA1.11', color: '#eab308', dash: '' },
+        { a: 'S3.12', b: 'KA2.11', color: '#eab308', dash: '' },
+
+        { a: 'S1.13', b: 'KA1.11', color: '#7f1d1d', dash: '' },
+        { a: 'S1.14', b: 'H1.X1', color: '#7f1d1d', dash: '' },
+        { a: 'H1.X1', b: 'KA1.A1', color: '#7f1d1d', dash: '' },
+        { a: 'KA1.A1', b: 'KA1.14', color: '#0ea5e9', dash: '' },
+        { a: 'KA1.11', b: 'KA2.14', color: '#7f1d1d', dash: '' },
+
+        { a: 'S2.13', b: 'KA1.14', color: '#6d28d9', dash: '' },
+        { a: 'S2.14', b: 'KA2.A1', color: '#6d28d9', dash: '' },
+        { a: 'KA2.A1', b: 'KA2.14', color: '#0ea5e9', dash: '' },
+
+        { a: 'H2.X1', b: 'KA1.24', color: '#92400e', dash: '5,5' },
+        { a: 'H2.X1', b: 'KA2.24', color: '#92400e', dash: '5,5' },
+        { a: 'H1.X2', b: 'H2.X2', color: '#111827', dash: '' }
+      ];
+    }
+
+    function loadPreset(presetKey) {
+      if (isLockedByPower()) return;
+      eng.power = false;
+      eng.tripped = false;
+      pos = {};
+      bl.innerHTML = '';
+      cl.innerHTML = '';
+      wl.innerHTML = '';
+
+      let comps = [];
+      let wires = [];
+
+      if (presetKey === 'empty_canvas') {
+        $('ttl').textContent = '';
+        comps = [];
+        wires = [];
+        $('eq-notes').value = '';
+      } else if (presetKey === 'erea_blank') {
+        $('ttl').textContent = 'Panneau de câblage – schéma';
+        comps = buildEreaBenchComponents();
+        wires = [];
+        $('eq-notes').value = "// Panneau EREA vierge.\n// Tirez des cordons d'une douille à l'autre.";
+      } else if (presetKey === 'erea_wired') {
+        $('ttl').textContent = 'Panneau de câblage – schéma';
+        comps = buildEreaBenchComponents();
+        wires = getEreaImageWires();
+        $('eq-notes').value = "KA1 (KD) = (S1 + KA1.14) . S3\nKA2 (KG) = (S2 + KA2.14) . S3\nH2 = KA1.24 + KA2.24";
+      } else if (presetKey === 'elec_hold') {
+        $('ttl').textContent = 'Panneau de câblage – Auto-maintien KA1';
+        comps = buildEreaBenchComponents();
+        wires = [
+          { a: 'PSU.+1', b: 'AU.11', color: '#d92626', dash: '' },
+          { a: 'AU.12', b: 'S3.11', color: '#d92626', dash: '' },
+          { a: 'S3.12', b: 'S1.13', color: '#d92626', dash: '' },
+          { a: 'S3.12', b: 'KA1.11', color: '#eab308', dash: '' },
+          { a: 'S3.12', b: 'KA1.21', color: '#eab308', dash: '' },
+          { a: 'S1.14', b: 'KA1.A1', color: '#6d28d9', dash: '' },
+          { a: 'KA1.14', b: 'KA1.A1', color: '#0ea5e9', dash: '' },
+          { a: 'KA1.24', b: 'H1.X1', color: '#16a34a', dash: '' },
+          { a: 'KA1.A2', b: 'PSU.-1', color: '#111827', dash: '' },
+          { a: 'H1.X2', b: 'PSU.-2', color: '#111827', dash: '' }
+        ];
+        $('eq-notes').value = "KA1 = (S1 + KA1.14) . S3 . AU\nH1 = KA1.24";
+      } else if (presetKey === 'pneu_cycle') {
+        $('ttl').textContent = 'Panneau Pneumatique – Cycle A+ / A-';
+        comps = [
+          { ...E('AIR', 'src', ['po1', 'po2', 'po3', 'po4']), x: 100, y: 100 },
+          { ...E('m', 'v32m', ['pP', 'pA'], { pressed: false }), x: 330, y: 100 },
+          { ...E('a0', 'v32s', ['pP', 'pA'], { cyl: 'A', end: 0 }), x: 480, y: 100 },
+          { ...E('a1', 'v32s', ['pP', 'pA'], { cyl: 'A', end: 1 }), x: 630, y: 100 },
+          { ...E('D1', 'v52', ['p1', 'p2', 'p4', 'p14', 'p12'], { s: 2 }), x: 460, y: 280 },
+          { ...E('A', 'cyl', ['p+', 'p-'], { pos: 0, single: false }), x: 440, y: 460 }
+        ];
+        wires = [
+          { a: 'AIR.po1', b: 'm.pP', color: '#0ea5e9', dash: '' },
+          { a: 'm.pA', b: 'a0.pP', color: '#0ea5e9', dash: '' },
+          { a: 'a0.pA', b: 'D1.p14', color: '#0ea5e9', dash: '' },
+          { a: 'AIR.po2', b: 'a1.pP', color: '#0ea5e9', dash: '' },
+          { a: 'a1.pA', b: 'D1.p12', color: '#0ea5e9', dash: '' },
+          { a: 'AIR.po3', b: 'D1.p1', color: '#0ea5e9', dash: '' },
+          { a: 'D1.p4', b: 'A.p+', color: '#0ea5e9', dash: '' },
+          { a: 'D1.p2', b: 'A.p-', color: '#0ea5e9', dash: '' }
+        ];
+        $('eq-notes').value = "A+ = m . a0\nA- = a1";
+      } else if (presetKey === 'epneu_cycle') {
+        $('ttl').textContent = 'Panneau Électropneumatique – Cycle A+ B+ A- B-';
+        comps = [
+          { ...E('PSU', 'psu_erea', ['+1', '+2', '-1', '-2']), x: 50, y: 80 },
+          { ...E('AIR', 'src', ['po1', 'po2', 'po3', 'po4']), x: 50, y: 410 },
+          { ...E('S1', 'btn', ['13', '14'], { no: true, pressed: false, color: '#2fb344', sym: 'I' }), x: 260, y: 80 },
+          { ...E('a0', 'sens', ['C', 'NF', 'NO'], { cyl: 'A', end: 0 }), x: 410, y: 80 },
+          { ...E('a1', 'sens', ['C', 'NF', 'NO'], { cyl: 'A', end: 1 }), x: 540, y: 80 },
+          { ...E('b0', 'sens', ['C', 'NF', 'NO'], { cyl: 'B', end: 0 }), x: 670, y: 80 },
+          { ...E('b1', 'sens', ['C', 'NF', 'NO'], { cyl: 'B', end: 1 }), x: 800, y: 80 },
+          { ...E('V1', 'v52e', ['p1', 'p2', 'p4', 'Y1a', 'Y1b', 'Y2a', 'Y2b'], { s: 2, coils: [['Y1a', 'Y1b'], ['Y2a', 'Y2b']] }), x: 340, y: 270 },
+          { ...E('V2', 'v52e', ['p1', 'p2', 'p4', 'Y3a', 'Y3b', 'Y4a', 'Y4b'], { s: 2, coils: [['Y3a', 'Y3b'], ['Y4a', 'Y4b']] }), x: 660, y: 270 },
+          { ...E('A', 'cyl', ['p+', 'p-'], { pos: 0, single: false }), x: 320, y: 460 },
+          { ...E('B', 'cyl', ['p+', 'p-'], { pos: 0, single: false }), x: 640, y: 460 }
+        ];
+        wires = [
+          { a: 'AIR.po1', b: 'V1.p1', color: '#0ea5e9', dash: '' },
+          { a: 'AIR.po2', b: 'V2.p1', color: '#0ea5e9', dash: '' },
+          { a: 'V1.p4', b: 'A.p+', color: '#0ea5e9', dash: '' },
+          { a: 'V1.p2', b: 'A.p-', color: '#0ea5e9', dash: '' },
+          { a: 'V2.p4', b: 'B.p+', color: '#0ea5e9', dash: '' },
+          { a: 'V2.p2', b: 'B.p-', color: '#0ea5e9', dash: '' },
+          { a: 'PSU.+1', b: 'S1.13', color: '#d92626', dash: '' },
+          { a: 'S1.14', b: 'b0.C', color: '#d92626', dash: '' },
+          { a: 'b0.NO', b: 'V1.Y1a', color: '#6d28d9', dash: '' },
+          { a: 'V1.Y1b', b: 'PSU.-1', color: '#2563eb', dash: '' },
+          { a: 'PSU.+2', b: 'a1.C', color: '#d92626', dash: '' },
+          { a: 'a1.NO', b: 'V2.Y3a', color: '#6d28d9', dash: '' },
+          { a: 'V2.Y3b', b: 'PSU.-2', color: '#2563eb', dash: '' },
+          { a: 'PSU.+2', b: 'b1.C', color: '#d92626', dash: '' },
+          { a: 'b1.NO', b: 'V1.Y2a', color: '#eab308', dash: '' },
+          { a: 'V1.Y2b', b: 'PSU.-1', color: '#2563eb', dash: '' },
+          { a: 'PSU.+2', b: 'a0.C', color: '#d92626', dash: '' },
+          { a: 'a0.NO', b: 'V2.Y4a', color: '#eab308', dash: '' },
+          { a: 'V2.Y4b', b: 'PSU.-2', color: '#2563eb', dash: '' }
+        ];
+        $('eq-notes').value = "Y1 (A+) = S1 . b0\nY3 (B+) = a1\nY2 (A-) = b1\nY4 (B-) = a0";
+      }
+
+      eng.load(comps, []);
+      comps.forEach(c => placeComp(c, c.x, c.y));
+      eng.wires = wires.filter(w => pos[w.a] && pos[w.b]);
+      drawWires();
+      updatePowerUI();
+      updateEmptyHint();
+    }
+
+    /*************************************************************************
+     * 8. INTERACTIONS SOURIS / DRAG & DROP / CÂBLAGE
+     *************************************************************************/
+    function termAtPoint(clientX, clientY) {
+      const els = document.elementsFromPoint(clientX, clientY);
+      for (const el of els) {
+        const tg = el.closest && el.closest('.term-group');
+        if (tg) return tg;
+      }
+      return null;
+    }
+
+    let pointerDownPos = { x: 0, y: 0 };
+    let hasMovedComp = false;
+
+    sv.addEventListener('pointerdown', (e) => {
+      // Clic milieu (molette) ou Barre Espace enfoncée -> Panoramique immédiat
+      if (e.button === 1 || spacePressed) {
+        e.preventDefault();
+        isPanning = true;
+        panStart = { x: e.clientX - panX, y: e.clientY - panY };
+        return;
+      }
+      if (e.button === 2) return;
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+      hasMovedComp = false;
+
+      // 1) Clic sur une douille banane -> Tirer un cordon
+      const tg = termAtPoint(e.clientX, e.clientY);
+      if (tg) {
+        e.stopPropagation();
+        dragTerm = tg.dataset.id;
+        tmpWire = document.createElementNS(NS, 'path');
+        tmpWire.setAttribute('class', 'wire-path');
+        tmpWire.setAttribute('stroke', isPneuTerm(dragTerm) ? '#0ea5e9' : wireCol);
+        if (wireDash) tmpWire.setAttribute('stroke-dasharray', wireDash);
+        tmpWire.style.opacity = '0.8';
+        tmpWire.style.pointerEvents = 'none';
+        wl.appendChild(tmpWire);
+        return;
+      }
+
+      // 2) Clic sur un composant
+      const compEl = e.target.closest('.c');
+      if (compEl) {
+        const c = eng.comps.find(k => k.id === compEl.dataset.id);
+        if (!c) return;
+
+        // Si l'alimentation est en marche, un clic sur un bouton l'actionne immédiatement sans le déplacer
+        if (eng.power && (c.type === 'btn' || c.type === 'au' || c.type === 'v32m')) {
+          if (c.type === 'au') {
+            c.pressed = !c.pressed;
+          } else if (e.shiftKey || c.latch) {
+            c.latch = !c.latch;
+            c.pressed = c.latch;
+          } else {
+            c.pressed = true;
+            heldBtn = c;
+          }
+          return;
+        }
+
+        // Si c'est une plaque verrouillée, on laisse passer en panoramique
+        if (c.isBoard && lockBoards) {
+          isPanning = true;
+          panStart = { x: e.clientX - panX, y: e.clientY - panY };
+          return;
+        }
+
+        // Sinon, on prépare le déplacement fluide du composant
+        const p = svgPt(e);
+        movingComp = { c, dx: p.x - c.x, dy: p.y - c.y };
+        return;
+      }
+
+      // 3) Fond du canevas -> Panoramique
+      isPanning = true;
+      panStart = { x: e.clientX - panX, y: e.clientY - panY };
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (palDragging) {
+        gh.style.left = e.clientX + 'px';
+        gh.style.top = e.clientY + 'px';
+      }
+      if (movingComp) {
+        const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+        if (dist > 5) hasMovedComp = true;
+        if (hasMovedComp) {
+          const p = svgPt(e);
+          movingComp.c.x = Math.round((p.x - movingComp.dx) / 5) * 5;
+          movingComp.c.y = Math.round((p.y - movingComp.dy) / 5) * 5;
+          moveComp(movingComp.c);
+          drawWires();
+        }
+      }
+      if (dragTerm && tmpWire) {
+        const p = svgPt(e);
+        tmpWire.setAttribute('d', wirePathD(pos[dragTerm], [p.x, p.y]));
+      }
+      if (isPanning) {
+        panX = e.clientX - panStart.x;
+        panY = e.clientY - panStart.y;
+        updateViewportTransform();
+      }
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      isPanning = false;
+
+      if (heldBtn && !heldBtn.latch) {
+        heldBtn.pressed = false;
+        heldBtn = null;
+      }
+
+      // Fin de Drag depuis la palette (Clonage infini ou pose du Banc EREA complet)
+      if (palDragging) {
+        gh.style.display = 'none';
+        const { item, comp, G } = palDragging;
+        palDragging = null;
+
+        const rect = sv.getBoundingClientRect();
+        const insideCanvas = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+        if (insideCanvas && !isLockedByPower()) {
+          const p = svgPt(e);
+          if (item.isMacroKit) {
+            const dx = Math.round((p.x - 480) / 10) * 10;
+            const dy = Math.round((p.y - 340) / 10) * 10;
+            const kitComps = buildEreaBenchComponents(dx, dy);
+            kitComps.forEach(kc => {
+              if (eng.comps.some(ex => ex.id === kc.id)) {
+                const { id } = nextUniqueId(kc.id.replace(/\d+$/, ''));
+                kc.id = id;
+              }
+              if (kc.isBoard) eng.comps.unshift(kc);
+              else eng.comps.push(kc);
+              placeComp(kc, kc.x, kc.y);
+            });
+            if (!$('ttl').textContent) $('ttl').textContent = 'Panneau de câblage – schéma';
+          } else {
+            const x = Math.round((p.x - G.w / 2) / 5) * 5;
+            const y = Math.round((p.y - G.h / 2) / 5) * 5;
+            if (comp.isBoard) eng.comps.unshift(comp);
+            else eng.comps.push(comp);
+            placeComp(comp, x, y);
+          }
+        }
+      }
+
+      // Fin de clic ou déplacement d'un composant
+      if (movingComp) {
+        const c = movingComp.c;
+        movingComp = null;
+
+        if (!hasMovedComp) {
+          // Simple clic sans bouger -> Actionner un bouton / arrêt d'urgence
+          if (c.type === 'au') {
+            c.pressed = !c.pressed;
+          } else if (c.type === 'btn' || c.type === 'v32m') {
+            if (e.shiftKey || c.latch) {
+              c.latch = !c.latch;
+              c.pressed = c.latch;
+            } else {
+              c.pressed = !c.pressed;
+            }
+          }
+        } else {
+          // Si glissé-déposé en dehors du plan vers la palette gauche -> Supprimer
+          const under = document.elementsFromPoint(e.clientX, e.clientY);
+          if (under.some(n => n.id === 'pal')) {
+            removeComp(c);
+          }
+        }
+      }
+
+      // Fin de tirage d'un cordon banane
+      if (dragTerm) {
+        const tg = termAtPoint(e.clientX, e.clientY);
+        const a = dragTerm;
+        if (tmpWire) tmpWire.remove();
+        tmpWire = null;
+        dragTerm = null;
+
+        if (!tg || tg.dataset.id === a) return;
+        const b = tg.dataset.id;
+
+        if (isPneuTerm(a) !== isPneuTerm(b)) {
+          showMsg("Impossible de relier une douille électrique à un raccord pneumatique !");
+          return;
+        }
+        if (isLockedByPower()) return;
+
+        eng.wires.push({
+          a,
+          b,
+          color: isPneuTerm(a) ? '#0ea5e9' : wireCol,
+          dash: isPneuTerm(a) ? '' : wireDash
+        });
+        drawWires();
+      }
+    });
+
+    // Clic droit : supprimer un câble ou un composant
+    sv.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const wg = e.target.closest('.wire-group');
+      if (wg) {
+        if (isLockedByPower()) return;
+        eng.wires.splice(Number(wg.dataset.i), 1);
+        drawWires();
+        return;
+      }
+      const compEl = e.target.closest('.c');
+      if (compEl) {
+        const c = eng.comps.find(k => k.id === compEl.dataset.id);
+        if (c) removeComp(c);
+      }
+    });
+
+    // Double-clic : renommer un composant
+    let editingComp = null;
+    sv.addEventListener('dblclick', (e) => {
+      const compEl = e.target.closest('.c');
+      if (!compEl) return;
+      const c = eng.comps.find(k => k.id === compEl.dataset.id);
+      if (!c || c.isBoard) return;
+      if (isLockedByPower()) return;
+
+      editingComp = c;
+      $('rename-inp').value = c.id;
+      $('rename-sub-wrap').classList.toggle('hidden', c.type !== 'relay_erea');
+      if (c.type === 'relay_erea') $('rename-sub').value = c.sub || '';
+
+      const isSensor = c.type === 'sens' || c.type === 'v32s';
+      $('rename-cyl-wrap').classList.toggle('hidden', !isSensor);
+      if (isSensor) {
+        $('rename-cyl').value = c.cyl || 'A';
+        $('rename-end').value = String(c.end || 0);
+      }
+
+      $('rename-modal').classList.remove('hidden');
+      $('rename-inp').focus();
+    });
+
+    $('rename-cancel').onclick = () => {
+      $('rename-modal').classList.add('hidden');
+      editingComp = null;
+    };
+
+    $('rename-ok').onclick = () => {
+      if (!editingComp) return;
+      const newId = $('rename-inp').value.trim();
+      if (newId && newId !== editingComp.id) {
+        if (eng.comps.some(k => k !== editingComp && k.id === newId)) {
+          showMsg(`Le repère "${newId}" existe déjà sur le plan.`);
+          return;
+        }
+        const oldPrefix = editingComp.id + '.';
+        eng.wires.forEach(w => {
+          if (w.a.startsWith(oldPrefix)) w.a = newId + '.' + w.a.slice(oldPrefix.length);
+          if (w.b.startsWith(oldPrefix)) w.b = newId + '.' + w.b.slice(oldPrefix.length);
+        });
+        Object.keys(pos).forEach(k => {
+          if (k.startsWith(oldPrefix)) delete pos[k];
+        });
+        editingComp.id = newId;
+      }
+      if (editingComp.type === 'relay_erea') {
+        editingComp.sub = $('rename-sub').value.trim();
+      }
+      if (editingComp.type === 'sens' || editingComp.type === 'v32s') {
+        editingComp.cyl = $('rename-cyl').value.trim().toUpperCase() || 'A';
+        editingComp.end = Number($('rename-end').value);
+      }
+      if (editingComp.g) editingComp.g.remove();
+      placeComp(editingComp, editingComp.x, editingComp.y);
+      drawWires();
+      $('rename-modal').classList.add('hidden');
+      editingComp = null;
+    };
+
+    /*************************************************************************
+     * 9. ACTIONS DE LA BARRE SUPÉRIEURE (HEADER 48PX)
+     *************************************************************************/
+    document.querySelectorAll('.swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+        sw.classList.add('active');
+        wireCol = sw.dataset.col;
+        wireDash = sw.dataset.dash || '';
+      });
+    });
+
+    function updatePowerUI() {
+      const btn = $('pw');
+      const led = $('pw-led');
+      if (eng.power) {
+        btn.className = 'h-7 px-3 rounded font-bold text-[11px] flex items-center gap-2 transition-all bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.5)]';
+        led.className = 'w-2 h-2 rounded-full bg-white animate-pulse';
+        $('pw-txt').textContent = '24V / Air : ON';
+      } else {
+        btn.className = 'h-7 px-3 rounded font-bold text-[11px] flex items-center gap-2 transition-all bg-slate-200 hover:bg-slate-300 text-slate-800 border border-slate-400';
+        led.className = 'w-2 h-2 rounded-full bg-slate-500';
+        $('pw-txt').textContent = 'Alimentation OFF';
+      }
+    }
+
+    $('pw').onclick = () => {
+      eng.tripped = false;
+      eng.power = !eng.power;
+      updatePowerUI();
+    };
+
+    $('pre').onchange = (e) => loadPreset(e.target.value);
+
+    $('lock-board-btn').onclick = () => {
+      lockBoards = !lockBoards;
+      document.querySelectorAll('.c').forEach(el => {
+        const c = eng.comps.find(k => k.id === el.dataset.id);
+        if (c && c.isBoard) el.classList.toggle('board-locked', lockBoards);
+      });
+      $('lock-board-ico').textContent = lockBoards ? '●' : '○';
+      $('lock-board-btn').classList.toggle('border-[#2f5d8a]', !lockBoards);
+      $('lock-board-btn').classList.toggle('text-[#2f5d8a]', !lockBoards);
+    };
+
+    $('clr-wires').onclick = () => {
+      if (isLockedByPower()) return;
+      eng.wires = [];
+      drawWires();
+    };
+
+    $('clr-all').onclick = () => {
+      if (isLockedByPower()) return;
+      $('pre').value = 'empty_canvas';
+      loadPreset('empty_canvas');
+    };
+
+    // Boutons de bascule Mode Graphique (Banc Réel EREA vs Symboles IEC vs Vue Split 50/50)
+    let isSplitFolio = false;
+    let savedRightWidth = 390;
+    let isLeftCollapsed = false;
+    let isRightCollapsed = false;
+
+    function toggleLeftPanel(forceState) {
+      isLeftCollapsed = typeof forceState === 'boolean' ? forceState : !isLeftCollapsed;
+      $('pal').classList.toggle('hidden', isLeftCollapsed);
+      $('left-collapsed-tab').classList.toggle('hidden', !isLeftCollapsed);
+      $('left-collapsed-tab').classList.toggle('flex', isLeftCollapsed);
+      $('hdr-left-ico').textContent = isLeftCollapsed ? '▶' : '◀';
+    }
+
+    function toggleRightPanel(forceState) {
+      isRightCollapsed = typeof forceState === 'boolean' ? forceState : !isRightCollapsed;
+      $('right-panel').classList.toggle('hidden', isRightCollapsed);
+      $('right-splitter').classList.toggle('hidden', isRightCollapsed);
+      $('right-collapsed-tab').classList.toggle('hidden', !isRightCollapsed);
+      $('right-collapsed-tab').classList.toggle('flex', isRightCollapsed);
+      $('hdr-right-ico').textContent = isRightCollapsed ? '◀' : '▶';
+    }
+
+    $('btn-collapse-left').onclick = () => toggleLeftPanel(true);
+    $('left-collapsed-tab').onclick = () => toggleLeftPanel(false);
+    $('hdr-toggle-left').onclick = () => toggleLeftPanel();
+
+    $('btn-collapse-right').onclick = () => toggleRightPanel(true);
+    $('right-collapsed-tab').onclick = () => toggleRightPanel(false);
+    $('hdr-toggle-right').onclick = () => toggleRightPanel();
+
+    // Redimensionnement fluide (Splitter Drag) du panneau de droite
+    let isResizingRight = false;
+    $('right-splitter').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      isResizingRight = true;
+      $('right-panel').classList.add('no-transition');
+      $('right-splitter').classList.add('active');
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isResizingRight) return;
+      const newW = Math.min(window.innerWidth * 0.68, Math.max(280, window.innerWidth - e.clientX));
+      savedRightWidth = newW;
+      isSplitFolio = false;
+      $('right-panel').style.width = `${Math.round(newW)}px`;
+      updateViewModeButtons();
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (isResizingRight) {
+        isResizingRight = false;
+        $('right-panel').classList.remove('no-transition');
+        $('right-splitter').classList.remove('active');
+      }
+    });
+
+    // Accordéons repliables dans le panneau de droite
+    function setupAccordion(hdrId, bodyId, icoId) {
+      $(hdrId).addEventListener('click', () => {
+        const body = $(bodyId);
+        const hidden = body.classList.toggle('hidden');
+        $(icoId).textContent = hidden ? '▶' : '▼';
+        if (hdrId === 'acc-hdr-folio') {
+          $('folio-section').classList.toggle('flex-1', !hidden);
+        }
+      });
+    }
+    setupAccordion('acc-hdr-eq', 'acc-body-eq', 'acc-ico-eq');
+    setupAccordion('acc-hdr-folio', 'acc-body-folio', 'acc-ico-folio');
+    setupAccordion('acc-hdr-log', 'acc-body-log', 'acc-ico-log');
+
+    function updateViewModeButtons() {
+      $('view-real').className = `px-2 py-0.5 rounded transition-all ${canvasSymbolMode === 'real' ? 'bg-[#2f5d8a] text-white font-bold' : 'text-slate-700 hover:text-slate-900'}`;
+      $('view-iec').className = `px-2 py-0.5 rounded transition-all ${canvasSymbolMode === 'iec' ? 'bg-[#2f5d8a] text-white font-bold' : 'text-slate-700 hover:text-slate-900'}`;
+      $('view-split').className = `px-2 py-0.5 rounded transition-all flex items-center gap-1 ${isSplitFolio ? 'bg-[#2f5d8a] text-white font-bold' : 'text-slate-700 hover:text-slate-900'}`;
+    }
+
+    $('view-real').onclick = () => {
+      canvasSymbolMode = 'real';
+      updateViewModeButtons();
+    };
+    $('view-iec').onclick = () => {
+      canvasSymbolMode = 'iec';
+      updateViewModeButtons();
+    };
+    const toggle5050 = () => {
+      if (isRightCollapsed) toggleRightPanel(false);
+      isSplitFolio = !isSplitFolio;
+      $('right-panel').style.width = isSplitFolio ? '48vw' : `${savedRightWidth}px`;
+      updateViewModeButtons();
+    };
+    $('view-split').onclick = toggle5050;
+    $('btn-5050-right').onclick = toggle5050;
+
+    // Synchronisation Équations -> Spawning composants + Câblage automatique
+    $('btn-apply-eq').onclick = () => {
+      buildCircuitFromEquations($('eq-notes').value);
+    };
+
+    $('btn-read-wires').onclick = () => {
+      const eqs = extractEquationsFromWires();
+      if (eqs.length > 0) {
+        $('eq-notes').value = eqs.map(e => `${e.lhs} = ${e.rhs}`).join('\n');
+        renderFolioDiagram(eqs);
+      } else {
+        showMsg("Aucun circuit complet entre +24V et un récepteur n'a été détecté.");
+      }
+    };
+
+    // Debounce lors de la frappe dans la zone d'équations si "Temps réel" est coché
+    let eqTypingTimer = null;
+    $('eq-notes').addEventListener('input', () => {
+      renderFolioDiagram(parseEquationsText($('eq-notes').value));
+      if (!$('auto-build-eq').checked) return;
+      clearTimeout(eqTypingTimer);
+      eqTypingTimer = setTimeout(() => {
+        if (!eng.power) {
+          buildCircuitFromEquations($('eq-notes').value);
+        }
+      }, 650);
+    });
+
+    // Exemples d'équations en 1 clic
+    document.querySelectorAll('.eq-preset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        $('eq-notes').value = btn.dataset.eq;
+        buildCircuitFromEquations($('eq-notes').value);
+      });
+    });
+
+    sv.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.08 : 0.92;
+      zoom = Math.min(2.2, Math.max(0.45, zoom * factor));
+      updateViewportTransform();
+    }, { passive: false });
+
+    $('z-in').onclick = () => { zoom = Math.min(2.2, zoom + 0.15); updateViewportTransform(); };
+    $('z-out').onclick = () => { zoom = Math.max(0.45, zoom - 0.15); updateViewportTransform(); };
+    $('z-center').onclick = () => centerAndFitCanvas();
+    $('z-fit').onclick = () => { zoom = 1; panX = 0; panY = 0; updateViewportTransform(); };
+
+    $('exp').onclick = () => {
+      const data = {
+        title: $('ttl').textContent,
+        notes: $('eq-notes').value,
+        comps: eng.comps.map(c => ({ ...c, g: undefined, f: undefined, G: undefined })),
+        wires: eng.wires
+      };
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      a.download = 'montage-erea.json';
+      a.click();
+    };
+
+    $('imp').onchange = async (e) => {
+      if (!e.target.files[0]) return;
+      try {
+        const data = JSON.parse(await e.target.files[0].text());
+        if (isLockedByPower()) return;
+        pos = {};
+        bl.innerHTML = '';
+        cl.innerHTML = '';
+        wl.innerHTML = '';
+        $('ttl').textContent = data.title || '';
+        $('eq-notes').value = data.notes || '';
+        eng.load(data.comps || [], []);
+        eng.comps.forEach(c => placeComp(c, c.x || 100, c.y || 100));
+        eng.wires = (data.wires || []).filter(w => pos[w.a] && pos[w.b]);
+        drawWires();
+        updateEmptyHint();
+      } catch (err) {
+        showMsg('Fichier JSON invalide.');
+      }
+      e.target.value = '';
+    };
+
+    /*************************************************************************
+     * 10. BOUCLE DE SIMULATION TEMPS RÉEL (60 FPS)
+     *************************************************************************/
+    function renderFrame(dt) {
+      for (const c of eng.comps) {
+        if (!c.g || c.isBoard) continue;
+        if (c.type === 'motor') {
+          c.a = ((c.a || 0) + (c.dir || 0) * dt * 540) % 360;
+        }
+        const drawFn = (canvasSymbolMode === 'iec' && DR_IEC[c.type]) ? DR_IEC[c.type] : DR[c.type];
+        c.f.innerHTML = drawFn(c);
+      }
+
+      const showFlux = $('flux').checked;
+      eng.wires.forEach((w, i) => {
+        const g = wl.children[i];
+        if (!g) return;
+        const path = g.querySelector('.wire-path');
+        if (!path) return;
+        path.classList.toggle('flux-elec', showFlux && w.live === 1);
+        path.classList.toggle('flux-pneu', showFlux && w.live === 2);
+      });
+
+      $('power-status-mini').textContent = eng.power ? '24V DC / 6 BAR ON' : 'HORS TENSION (OFF)';
+      $('power-status-mini').className = `text-[9.5px] font-mono font-bold ${eng.power ? 'text-emerald-800' : 'text-slate-600'}`;
+
+      const lines = [];
+      for (const c of eng.comps) {
+        if (c.isBoard || c.type === 'psu_erea' || c.type === 'src') continue;
+        if (c.type === 'cyl') {
+          lines.push(`<div>🔧 <b>${c.id}</b> : <span class="text-[#2f5d8a]">${Math.round(c.pos * 100)}%</span></div>`);
+        } else if (c.on) {
+          lines.push(`<div>🟢 <b>${c.id}</b>${c.sub ? ' (' + c.sub + ')' : ''} = <span class="text-[#2f5d8a] font-bold">1</span></div>`);
+        } else if (c.pressed) {
+          lines.push(`<div>👆 <b>${c.id}</b> = <span class="text-emerald-800 font-bold">Actif</span></div>`);
+        } else if (c.dir) {
+          lines.push(`<div>⚙️ <b>${c.id}</b> = <span class="text-[#2f5d8a] font-bold">${c.dir > 0 ? 'Sens +' : 'Sens -'}</span></div>`);
+        }
+      }
+      $('log').innerHTML = lines.join('') || '<div class="col-span-2 text-slate-600">Aucun récepteur actif</div>';
+      renderFolioDiagram();
+    }
+
+    let lastTime = performance.now();
+    function mainLoop(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
+      lastTime = now;
+      eng.step(dt);
+
+      if (eng.short) {
+        eng.short = false;
+        updatePowerUI();
+        showMsg('Court-circuit entre +24V et 0V : disjoncteur déclenché.');
+        sv.classList.add('spark');
+        setTimeout(() => sv.classList.remove('spark'), 900);
+      }
+
+      renderFrame(dt);
+      requestAnimationFrame(mainLoop);
+    }
+
+    // Lancement initial : Démarrage à vide (Plan vierge)
+    renderPalette();
+    loadPreset('empty_canvas');
+    requestAnimationFrame(mainLoop);
+  </script>
+</body>
+</html>
